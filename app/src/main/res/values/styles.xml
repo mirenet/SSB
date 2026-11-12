@@ -1,7 +1,13 @@
 <resources>
     <style name="Theme.SSBFactory" parent="Theme.AppCompat.Light.NoActionBar">
-        <!-- Postavlja crnu pozadinu prozora da eliminiše beli bljesak na startu -->
+        <!-- Pozadina prozora i aplikacije u crno -->
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:colorBackground">@android:color/black</item>
+        
+        <!-- Ključno: Podesi status bar da bude potpuno crn umesto sivog -->
+        <item name="android:statusBarColor">@android:color/black</item>
+        
+        <!-- Opciono: Ako želiš da ikonice u status baru budu bele (za tamnu temu) -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
