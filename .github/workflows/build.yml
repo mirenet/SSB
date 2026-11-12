@@ -19,12 +19,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Proveri i pripremi Gradle wrapper
+      - name: Postavi Gradle 8.2 Wrapper
         run: |
-          if [ ! -f "gradlew" ]; then
-            echo "Gradlew ne postoji, generisem Gradle 8.2..."
-            gradle wrapper --gradle-version 8.2
-          fi
+          gradle wrapper --gradle-version 8.2 --distribution-type bin
           chmod +x gradlew
 
       - name: Pokreni Gradle Build (Debug APK)
