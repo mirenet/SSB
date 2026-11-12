@@ -22,8 +22,8 @@ jobs:
       - name: Proveri i pripremi Gradle wrapper
         run: |
           if [ ! -f "gradlew" ]; then
-            echo "Gradlew ne postoji, generisem ga..."
-            gradle wrapper
+            echo "Gradlew ne postoji, generisem Gradle 8.2..."
+            gradle wrapper --gradle-version 8.2
           fi
           chmod +x gradlew
 
