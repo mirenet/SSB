@@ -151,13 +151,21 @@ public class MainActivity extends AppCompatActivity {
             String startUrl = "";
             String htmlData = "";
 
-            if (finalDataToSend != null && (finalDataToSend.startsWith("http://") || finalDataToSend.startsWith("https://"))) {
-                startUrl = finalDataToSend;
-            } else {
-                htmlData = finalDataToSend;
+            if (finalDataToSend != null) {
+                if (finalDataToSend.startsWith("http://") || finalDataToSend.startsWith("https://")) {
+                    startUrl = finalDataToSend;
+                } else {
+                    htmlData = finalDataToSend;
+                }
             }
 
-            triggerGitHubAction(appName, packageName, iconBase64, htmlData, startUrl, configContent);
+            // Čistimo base64 ikonicu od data:image/... prefiksa ako postoji
+            String cleanIcon = iconBase64;
+            if (cleanIcon != null && cleanIcon.contains(",")) {
+                cleanIcon = cleanIcon.split(",")[1];
+            }
+
+            triggerGitHubAction(appName, packageName, cleanIcon, htmlData, startUrl, configContent);
         }
 
         @JavascriptInterface
