@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>App Factory Menu</title>
+
+<style>
+:root{
+    --main-background: #070707;
+    --btn-accent: #CBD868;
+    --btn-hover: #A4A25C;
+    --btn-active: #8C7F6F;
+}
+
+html, body{
+    margin: 0;
+    height: 100%;
+    font-family: Inter, Arial, sans-serif;
+    background: var(--main-background);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    user-select: none;    
+}
+
+button, input {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus, button:active, input:focus {
+    outline: none;
+}
+
+/* Glavni Popup / Meni */
+.popup{
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100% - 32px);
+    max-width: 360px;
+    background: #1a1a1c;
+    border-radius: 10px;
+    border: none;
+    padding: 22px 18px;
+    box-shadow: 0 0 0 0.9px #7C874F;
+    box-sizing: border-box;
+    z-index: 1000;
+}
+
+#configModal {
+    display: none;
+    padding-bottom: 20px !important;
+}
+
+#configModal textarea {
+    height: 204px !important;
+}
+
+#configModal .popup-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 6px !important;
+    margin-top: -10px !important;
+}
+
+#configModal h3 {
+    text-align: center !important;
+    margin-bottom: 6px !important;
+}
+
+.popup-header {
+    display: flex;
+    align-items: center;
+    margin-top: -10px;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+.popup h3{
+    margin: 0;
+    margin-top: -0.8px;
+    margin-bottom: 4px;
+    color: #CBD868;
+    font-size: 17px;
+    font-weight: 600;
+    flex-grow: 1;
+    text-align: center;
+}
+
+.settings-icon-btn {
+    margin-top: 0px;
+    margin-left: -7px;
+    margin-right: 5px;
+    margin-bottom: 4px;
+    background: none;
+    border: none;
+    color: #CBD868;
+    cursor: pointer;
+    border-radius: 6px;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    outline: none;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-icon-btn:hover {
+    background: rgba(203, 216, 104, 0.1);
+}
+
+.settings-icon-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+}
+
+.input-group {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.input-group input[type="text"] {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 10px;
+    background: #1A1A1A;
+    color: #9E9DA4;
+    border: none;
+    box-sizing: border-box;
+    font-size: 14px; 
+    outline: none;
+    box-shadow: 0 0 0 0.8px #606060;
+    font-family: Inter, Arial, sans-serif;
+}
+
+.input-group input[type="text"]::placeholder {
+    color: #9E9DA4;
+    opacity: 1;
+}
+
+.input-group input[type="text"]:focus {
+    outline: 1px solid #888888;
+}
+
+.url-input-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.url-input-wrapper input[type="text"] {
+    padding-right: 72px;
+}
+
+.input-action-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #8B8B8B;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+}
+
+.input-action-btn:hover {
+    background: rgba(203, 216, 104, 0.1);
+    color: #CBD868;
+}
+
+.file-browse-btn {
+    right: 36px;
+}
+
+.file-browse-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+.icon-preview-btn {
+    right: 6px;
+    overflow: hidden;
+    padding: 0;
+    color: #8B8B8B;
+}
+
+.icon-preview-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+#htmlFileInput, #iconFileInput {
+    display: none;
+}
+
+.row{
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 4px;
+}
+
+.row button{
+    flex: 1;
+    padding: 11px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    background-color: var(--btn-accent);
+    color: #555;
+    transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.row button:hover{
+    filter: brightness(1.25);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+}
+
+.mask-text{
+    color: #555;
+    filter: brightness(0);
+}
+</style>
+</head>
+<body>
+
+<!-- GLAVNI PROZOR -->
+<div id="mainPopup" class="popup">
+    <div class="popup-header">
+        <span style="width: 30px;"></span>
+        <h3>Single Site Builder</h3>
+        <button id="openConfigBtn" class="settings-icon-btn" title="Edit config">
+            <svg viewBox="0 0 24 24">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06-.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l-.06-.06a2 2 0 0 1 2.83 2.83l-.06-.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+            </svg>
+        </button>
+    </div>
+    
+    <div class="input-group">
+        <input type="text" id="appNameInput" placeholder="Enter application name..">
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="appPackageInput" placeholder="Enter app package name..">
+    </div>
+
+    <div class="input-group">
+        <div class="url-input-wrapper">
+            <input type="text" id="startUrlInput" placeholder="Select html or enter url..">
+            
+            <button type="button" class="input-action-btn file-browse-btn" id="browseFileBtn" title="Load local HTML file">
+                <svg viewBox="0 0 24 24">
+                    <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                </svg>
+            </button>
+            <input type="file" id="htmlFileInput" accept=".html,.htm">
+
+            <button type="button" class="input-action-btn icon-preview-btn" id="iconPreviewBtn" title="Select app icon">
+                <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2;">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+            </button>
+            <input type="file" id="iconFileInput" accept="image/*">
+        </div>
+    </div>
+    
+    <div class="row">
+        <button id="createBtn">
+            <span class="mask-text" id="createBtnText">Create</span>
+        </button>
+        <button id="closeBtn">
+            <span class="mask-text">Close</span>
+        </button>
+    </div>
+</div>
+
+<!-- CONFIG MODAL -->
+<div id="configModal" class="popup">
+    <div class="popup-header">
+        <h3>Config..</h3>
+    </div>
+    <textarea id="configTextArea" style="width:100%; height:204px; background:#111; color:#CBD868; border:1.5px solid #555b35; border-radius:8px; padding:10px; font-family:monospace; font-size:12px; box-sizing:border-box; outline:none; resize:none;"></textarea>
+    <div class="row" style="margin-top:10px;">
+        <button id="saveConfigBtn"><span class="mask-text">Save</span></button>
+        <button id="closeConfigBtn"><span class="mask-text">Close</span></button>
+    </div>
+</div>
+
+<script>
+const mainPopup = document.getElementById("mainPopup");
+const configModal = document.getElementById("configModal");
+const configTextArea = document.getElementById("configTextArea");
+
+const browseFileBtn = document.getElementById("browseFileBtn");
+const htmlFileInput = document.getElementById("htmlFileInput");
+const startUrlInput = document.getElementById("startUrlInput");
+
+const iconPreviewBtn = document.getElementById("iconPreviewBtn");
+const iconFileInput = document.getElementById("iconFileInput");
+
+const createBtn = document.getElementById("createBtn");
+const createBtnText = document.getElementById("createBtnText");
+
+let base64Icon = "";
+let htmlFileContent = "";
+
+const DEFAULT_CONFIG_TEXT = `const config = {
+external: [], 
+startURL: "", 
+broAgent: "", 
+portrait: true, 
+screenOn: false,
+allowZoom: false,
+forceDark: false,
+refreshOn: false,
+scrollBar: true,
+mobilView: true,
+background: false
+};`;
+
+// Inicijalizacija config text area-e
+configTextArea.value = DEFAULT_CONFIG_TEXT;
+
+document.getElementById("openConfigBtn").addEventListener("click", () => {
+    mainPopup.style.display = "none";
+    configModal.style.display = "flex";
+});
+
+document.getElementById("closeConfigBtn").addEventListener("click", () => {
+    configModal.style.display = "none";
+    mainPopup.style.display = "flex";
+});
+
+document.getElementById("saveConfigBtn").addEventListener("click", () => {
+    configModal.style.display = "none";
+    mainPopup.style.display = "flex";
+});
+
+browseFileBtn.addEventListener("click", () => {
+    htmlFileInput.click();
+});
+
+htmlFileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        startUrlInput.value = file.name;
+        
+        // Čitamo sadržaj lokalnog HTML fajla da ga prosledimo aplikaciji
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            htmlFileContent = event.target.result;
+        };
+        reader.readAsText(file);
+    }
+});
+
+iconPreviewBtn.addEventListener("click", () => {
+    iconFileInput.click();
+});
+
+iconFileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(uploadEvent) {
+            base64Icon = uploadEvent.target.result; // Čuvamo Base64 ikonice
+            iconPreviewBtn.innerHTML = `<img src="${base64Icon}" alt="Icon">`;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Klik na Create dugme
+let appState = "create"; // create, working, install
+
+createBtn.addEventListener("click", () => {
+    const appName = document.getElementById("appNameInput").value.trim();
+    const packageName = document.getElementById("appPackageInput").value.trim();
+    const startUrl = startUrlInput.value.trim();
+    const configContent = configTextArea.value;
+
+    if (appState === "create") {
+        if (!appName || !packageName) {
+            alert("Molimo unesite ime aplikacije i paket!");
+            return;
+        }
+
+        appState = "working";
+        createBtnText.innerText = "Working...";
+        createBtn.style.opacity = "0.7";
+
+        // Pozivamo Android kod (ako postoji most) ili simuliramo
+        if (window.AndroidBridge) {
+            window.AndroidBridge.startCreatingApp(appName, packageName, base64Icon, htmlFileContent || startUrl, configContent);
+        } else {
+            console.log("AndroidBridge nije dostupan (test u browseru)");
+        }
+    } else if (appState === "install") {
+        if (window.AndroidBridge) {
+            window.AndroidBridge.installApp();
+        }
+    }
+});
+
+// Funkcija koju Android poziva kada završi proces gradnje
+function setAppReadyForInstall() {
+    appState = "install";
+    createBtnText.innerText = "Install";
+    createBtn.style.opacity = "1";
+}
+</script>
+
+</body>
+</html>
