@@ -37,9 +37,9 @@ public class MainActivity extends AppCompatActivity {
     private Runnable statusChecker;
     
     // Tvoji GitHub podaci (Unesi svoje podatke)
-    private static final String GITHUB_TOKEN = "TVOJ_GITHUB_PERSONAL_ACCESS_TOKEN";
-    private static final String GITHUB_OWNER = "tvoje_korisnicko_ime";
-    private static final String GITHUB_REPO = "ime_repozitorijuma_kostura";
+    private static final String GITHUB_TOKEN = "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";
+    private static final String GITHUB_OWNER = "mirenet";
+    private static final String GITHUB_REPO = "skeleton";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
