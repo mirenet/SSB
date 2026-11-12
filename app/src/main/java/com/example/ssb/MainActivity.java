@@ -28,7 +28,6 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.zip.ZipInputStream;
 
 public class MainActivity extends AppCompatActivity {
@@ -37,7 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler = new Handler(Looper.getMainLooper());
     private Runnable statusChecker;
     
-    // Tvoji GitHub podaci (Ovde unesi svoje podatke)
+    // Tvoji GitHub podaci (Unesi svoje podatke)
     private static final String GITHUB_TOKEN = "TVOJ_GITHUB_PERSONAL_ACCESS_TOKEN";
     private static final String GITHUB_OWNER = "tvoje_korisnicko_ime";
     private static final String GITHUB_REPO = "ime_repozitorijuma_kostura";
@@ -46,12 +45,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Povezujemo se sa activity_main.xml layout-om umesto dinamičkog kreiranja
+        // Povezivanje sa activity_main.xml layout-om
         setContentView(R.layout.activity_main);
 
         webView = findViewById(R.id.webview);
         
-        // Ključno: Postavljamo crnu boju pozadine da sprečimo beli bljesak pri pokretanju
+        // Postavljamo crnu pozadinu da sprečimo beli bljesak pri pokretanju
         webView.setBackgroundColor(Color.BLACK);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
@@ -78,6 +77,11 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void installApp() {
             promptInstall();
+        }
+
+        @JavascriptInterface
+        public void closeApp() {
+            finish();
         }
     }
 
@@ -226,10 +230,8 @@ public class MainActivity extends AppCompatActivity {
                     fos.write(response.body().bytes());
                     fos.close();
 
-                    // Raspakuj zip da izvuces APK
                     unzipApk(zipFile);
 
-                    // Javi JavaScript-u da je sve spremno za dugme Install
                     handler.post(new Runnable() {
                         @Override
                         public void run() {
