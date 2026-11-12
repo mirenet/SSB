@@ -8,9 +8,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 
@@ -36,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler = new Handler(Looper.getMainLooper());
     private Runnable statusChecker;
     
-    // Tvoji GitHub podaci (Unesi svoje podatke)
+    // Tvoji tačni GitHub podaci
     private static final String GITHUB_TOKEN = "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";
     private static final String GITHUB_OWNER = "mirenet";
     private static final String GITHUB_REPO = "skeleton";
@@ -93,11 +95,11 @@ public class MainActivity extends AppCompatActivity {
             jsonBody.put("event_type", "build-app");
             
             JSONObject clientPayload = new JSONObject();
-            clientPayload.put("app_name", appName);
-            clientPayload.put("package_name", packageName);
-            clientPayload.put("icon_base64", iconBase64);
-            clientPayload.put("html_data", htmlData);
-            clientPayload.put("config_content", configContent);
+            clientPayload.put("app_name", appName != null ? appName : "");
+            clientPayload.put("package_name", packageName != null ? packageName : "");
+            clientPayload.put("icon_base64", iconBase64 != null ? iconBase64 : "");
+            clientPayload.put("html_data", htmlData != null ? htmlData : "");
+            clientPayload.put("config_content", configContent != null ? configContent : "");
             
             jsonBody.put("client_payload", clientPayload);
 
@@ -113,17 +115,21 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     e.printStackTrace();
+                    Log.e("GitHubDispatch", "Neuspešno slanje zahteva: " + e.getMessage());
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
                     if (response.isSuccessful()) {
                         startCheckingBuildStatus();
+                    } else {
+                        Log.e("GitHubDispatch", "Greška sa servera: " + response.code() + " - " + response.body().string());
                     }
                 }
             });
         } catch (Exception e) {
             e.printStackTrace();
+            Log.e("GitHubDispatch", "Izuzetak: " + e.getMessage());
         }
     }
 
@@ -269,6 +275,22 @@ public class MainActivity extends AppCompatActivity {
 
     private void promptInstall() {
         File apkFile = new File(getExternalFilesDir(null), "app-debug.apk");
+        if (!apkFile.exists()) {
+            Toast.makeText(this, "APK fajl nije pronađen!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Provera dozvole za instalaciju nepoznatih aplikacija (Android 8.0+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!getPackageManager().canRequestPackageInstalls()) {
+                Toast.makeText(this, "Omogućite instalaciju aplikacija za ovu fabriku.", Toast.LENGTH_LONG).show();
+                Uri settingsUri = Uri.parse("package:" + getPackageName());
+                Intent settingsIntent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, settingsUri);
+                startActivity(settingsIntent);
+                return;
+            }
+        }
+
         Intent intent = new Intent(Intent.ACTION_VIEW);
         Uri apkUri;
 
