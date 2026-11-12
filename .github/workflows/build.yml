@@ -1,18 +1,16 @@
-name: Build SSB App APK
+name: Build SSB Factory App APK
 
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
-  repository_dispatch:
-    types: [build-app]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Izvuci kod (Checkout kostur)
+      - name: Izvuci kod
         uses: actions/checkout@v4
 
       - name: Postavi Java SDK
@@ -21,41 +19,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Ubaci dinamičke podatke (ako stižu iz aplikacije)
-        env:
-          APP_NAME: ${{ github.event.client.app_name }}
-          PACKAGE_NAME: ${{ github.event.client.package_name }}
-          HTML_DATA: ${{ github.event.client.html_data }}
-          CONFIG_CONTENT: ${{ github.event.client.config_content }}
+      - name: Proveri i pripremi Gradle wrapper
         run: |
-          echo "Proveravam dolazne podatke..."
-          
-          # 1. Ako je poslat HTML, zameni index.html u assets
-          if [ -n "$HTML_DATA" ]; then
-            echo "Upisujem novi index.html..."
-            echo "$HTML_DATA" > app/src/main/assets/index.html
+          if [ ! -f "gradlew" ]; then
+            echo "Gradlew ne postoji, generisem ga..."
+            gradle wrapper
           fi
-
-          # 2. Ako je poslat Config, zameni appConfig.js u assets
-          if [ -n "$CONFIG_CONTENT" ]; then
-            echo "Upisujem novi appConfig.js..."
-            echo "$CONFIG_CONTENT" > app/src/main/assets/appConfig.js
-          fi
-
-          # 3. Ako je prosleđeno ime aplikacije, promeni u strings.xml
-          if [ -n "$APP_NAME" ]; then
-            echo "Menjam ime aplikacije u: $APP_NAME"
-            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">'"$APP_NAME"'<\/string>/g' app/src/main/res/values/strings.xml
-          fi
-
-          # 4. Ako je prosleđen paket, promeni u build.gradle (applicationId)
-          if [ -n "$PACKAGE_NAME" ]; then
-            echo "Menjam paket u: $PACKAGE_NAME"
-            sed -i 's/applicationId ".*"/applicationId "'"$PACKAGE_NAME"'"/g' app/build.gradle
-          fi
-
-      - name: Dozvoli izvršavanje Gradle wrapper-a
-        run: chmod +x gradlew
+          chmod +x gradlew
 
       - name: Pokreni Gradle Build (Debug APK)
         run: ./gradlew assembleDebug
@@ -63,5 +33,5 @@ jobs:
       - name: Sačuvaj APK kao Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: generated-apk
+          name: ssb-factory-apk
           path: app/build/outputs/apk/debug/app-debug.apk
