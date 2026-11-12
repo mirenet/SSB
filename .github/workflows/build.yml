@@ -1,0 +1,47 @@
+name: Build SSB App APK
+
+on:
+  repository_dispatch:
+    types: [build-app]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Izvuci kod (Checkout kostur)
+        uses: actions/checkout@v4
+
+      - name: Postavi Java SDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Upisi podatke u projekat
+        env:
+          APP_NAME: ${{ github.event.client.app_name }}
+          PACKAGE_NAME: ${{ github.event.client.package_name }}
+          HTML_DATA: ${{ github.event.client.html_data }}
+          CONFIG_CONTENT: ${{ github.event.client.config_content }}
+        run: |
+          echo "Podesavam ime aplikacije: $APP_NAME"
+          echo "Podesavam paket: $PACKAGE_NAME"
+          
+          # 1. Upisujemo novi index.html u assets
+          echo "$HTML_DATA" > app/src/main/assets/index.html
+          
+          # 2. Upisujemo novi appConfig.js u assets
+          echo "$CONFIG_CONTENT" > app/src/main/assets/appConfig.js
+          
+          # 3. Menjamo ime paketa u AndroidManifest.xml i Gradle fajlovima (ako je potrebno)
+          # Ovde mozes dodati sed komande za zamenu paketa ako zelis dinamicki package name
+
+      - name: Pokreni Gradle Build (Debug APK)
+        run: ./gradlew assembleDebug
+
+      - name: Sacuvaj APK kao Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
