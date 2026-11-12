@@ -47,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private final static int FILE_CHOOSER_RESULT_CODE = 1;
     
     // Tvoji tačni GitHub podaci
-    private static final String GITHUB_TOKEN = "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";
+    private static final String GITHUB_TOKEN = "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";
     private static final String GITHUB_OWNER = "mirenet";
     private static final String GITHUB_REPO = "skeleton";
 
