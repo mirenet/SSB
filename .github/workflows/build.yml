@@ -1,6 +1,9 @@
 name: Build SSB App APK
 
 on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
   repository_dispatch:
     types: [build-app]
 
@@ -18,29 +21,46 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Upisi podatke u projekat
+      - name: Ubaci dinamičke podatke (ako stižu iz aplikacije)
         env:
           APP_NAME: ${{ github.event.client.app_name }}
           PACKAGE_NAME: ${{ github.event.client.package_name }}
           HTML_DATA: ${{ github.event.client.html_data }}
           CONFIG_CONTENT: ${{ github.event.client.config_content }}
         run: |
-          echo "Podesavam ime aplikacije: $APP_NAME"
-          echo "Podesavam paket: $PACKAGE_NAME"
+          echo "Proveravam dolazne podatke..."
           
-          # 1. Upisujemo novi index.html u assets
-          echo "$HTML_DATA" > app/src/main/assets/index.html
-          
-          # 2. Upisujemo novi appConfig.js u assets
-          echo "$CONFIG_CONTENT" > app/src/main/assets/appConfig.js
-          
-          # 3. Menjamo ime paketa u AndroidManifest.xml i Gradle fajlovima (ako je potrebno)
-          # Ovde mozes dodati sed komande za zamenu paketa ako zelis dinamicki package name
+          # 1. Ako je poslat HTML, zameni index.html u assets
+          if [ -n "$HTML_DATA" ]; then
+            echo "Upisujem novi index.html..."
+            echo "$HTML_DATA" > app/src/main/assets/index.html
+          fi
+
+          # 2. Ako je poslat Config, zameni appConfig.js u assets
+          if [ -n "$CONFIG_CONTENT" ]; then
+            echo "Upisujem novi appConfig.js..."
+            echo "$CONFIG_CONTENT" > app/src/main/assets/appConfig.js
+          fi
+
+          # 3. Ako je prosleđeno ime aplikacije, promeni u strings.xml
+          if [ -n "$APP_NAME" ]; then
+            echo "Menjam ime aplikacije u: $APP_NAME"
+            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">'"$APP_NAME"'<\/string>/g' app/src/main/res/values/strings.xml
+          fi
+
+          # 4. Ako je prosleđen paket, promeni u build.gradle (applicationId)
+          if [ -n "$PACKAGE_NAME" ]; then
+            echo "Menjam paket u: $PACKAGE_NAME"
+            sed -i 's/applicationId ".*"/applicationId "'"$PACKAGE_NAME"'"/g' app/build.gradle
+          fi
+
+      - name: Dozvoli izvršavanje Gradle wrapper-a
+        run: chmod +x gradlew
 
       - name: Pokreni Gradle Build (Debug APK)
         run: ./gradlew assembleDebug
 
-      - name: Sacuvaj APK kao Artifact
+      - name: Sačuvaj APK kao Artifact
         uses: actions/upload-artifact@v4
         with:
           name: generated-apk
