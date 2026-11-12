@@ -1,5 +1,7 @@
 package com.example.ssb;
 
+import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -10,6 +12,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
@@ -38,6 +42,10 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler = new Handler(Looper.getMainLooper());
     private Runnable statusChecker;
     
+    // Za pretragu fajlova u WebView-u
+    private ValueCallback<Uri[]> uploadMessage;
+    private final static int FILE_CHOOSER_RESULT_CODE = 1;
+    
     // Tvoji tačni GitHub podaci
     private static final String GITHUB_TOKEN = "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";
     private static final String GITHUB_OWNER = "mirenet";
@@ -47,21 +55,69 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Povezivanje sa activity_main.xml layout-om
         setContentView(R.layout.activity_main);
 
         webView = findViewById(R.id.webview);
         
-        // Postavljamo crnu pozadinu da sprečimo beli bljesak pri pokretanju
         webView.setBackgroundColor(Color.BLACK);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+        webView.getSettings().setAllowFileAccess(true);
         
-        // Povezivanje JavaScript mosta sa aplikacijom
         webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
         webView.setWebViewClient(new WebViewClient());
         
+        // KLJUČNO: Omogućava otvaranje fajl explorera iz HTML input type="file"
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (uploadMessage != null) {
+                    uploadMessage.onReceiveValue(null);
+                    uploadMessage = null;
+                }
+                uploadMessage = filePathCallback;
+
+                Intent intent = fileChooserParams.createIntent();
+                try {
+                    startActivityForResult(intent, FILE_CHOOSER_RESULT_CODE);
+                } catch (ActivityNotFoundException e) {
+                    uploadMessage = null;
+                    showAlert("Greška", "Nema instalirane aplikacije za pregled fajlova.");
+                    return false;
+                }
+                return true;
+            }
+        });
+        
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    // Prihvatamo izabrani fajl iz sistema i vraćamo ga u WebView
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
+        super.onActivityResult(requestCode, resultCode, intent);
+        if (requestCode == FILE_CHOOSER_RESULT_CODE) {
+            if (uploadMessage == null) return;
+            Uri[] results = null;
+            if (resultCode == RESULT_OK && intent != null) {
+                String dataString = intent.getDataString();
+                if (dataString != null) {
+                    results = new Uri[]{Uri.parse(dataString)};
+                }
+            }
+            uploadMessage.onReceiveValue(results);
+            uploadMessage = null;
+        }
+    }
+
+    private void showAlert(String title, String message) {
+        handler.post(() -> {
+            new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show();
+        });
     }
 
     public class WebAppInterface {
@@ -92,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
         
         try {
             JSONObject jsonBody = new JSONObject();
-            jsonBody.put("event_type", "build-app");
+            jsonBody.put("event_type", "build-app"); // GitHub Repository Dispatch tip
             
             JSONObject clientPayload = new JSONObject();
             clientPayload.put("app_name", appName != null ? appName : "");
@@ -104,8 +160,12 @@ public class MainActivity extends AppCompatActivity {
             jsonBody.put("client_payload", clientPayload);
 
             RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.parse("application/json; charset=utf-8"));
+            
+            // Ispravan GitHub URL za dispatches
+            String url = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches";
+            
             Request request = new Request.Builder()
-                    .url("https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches")
+                    .url(url)
                     .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
                     .addHeader("Accept", "application/vnd.github+json")
                     .post(body)
@@ -115,21 +175,23 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     e.printStackTrace();
-                    Log.e("GitHubDispatch", "Neuspešno slanje zahteva: " + e.getMessage());
+                    showAlert("Greška mreže", "Neuspešno slanje zahteva: " + e.getMessage());
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
                     if (response.isSuccessful()) {
+                        showAlert("Uspeh!", "Zahtev poslat na GitHub! Pokrenuta je gradnja.");
                         startCheckingBuildStatus();
                     } else {
-                        Log.e("GitHubDispatch", "Greška sa servera: " + response.code() + " - " + response.body().string());
+                        String errBody = response.body() != null ? response.body().string() : "Nepoznato";
+                        showAlert("GitHub Greška", "Kod: " + response.code() + "\nOdgovor: " + errBody);
                     }
                 }
             });
         } catch (Exception e) {
             e.printStackTrace();
-            Log.e("GitHubDispatch", "Izuzetak: " + e.getMessage());
+            showAlert("Izuzetak", "Greška: " + e.getMessage());
         }
     }
 
@@ -140,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
                 checkLatestWorkflowRun();
             }
         };
-        handler.postDelayed(statusChecker, 30000); // Provera na svakih 30 sekundi
+        handler.postDelayed(statusChecker, 30000);
     }
 
     private void checkLatestWorkflowRun() {
@@ -242,6 +304,7 @@ public class MainActivity extends AppCompatActivity {
                         @Override
                         public void run() {
                             webView.evaluateJavascript("setAppReadyForInstall();", null);
+                            showAlert("Gotovo!", "APK je uspešno skinut i spreman za instalaciju.");
                         }
                     });
                 }
@@ -276,14 +339,13 @@ public class MainActivity extends AppCompatActivity {
     private void promptInstall() {
         File apkFile = new File(getExternalFilesDir(null), "app-debug.apk");
         if (!apkFile.exists()) {
-            Toast.makeText(this, "APK fajl nije pronađen!", Toast.LENGTH_SHORT).show();
+            showAlert("Greška", "APK fajl nije pronađen na uređaju!");
             return;
         }
 
-        // Provera dozvole za instalaciju nepoznatih aplikacija (Android 8.0+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!getPackageManager().canRequestPackageInstalls()) {
-                Toast.makeText(this, "Omogućite instalaciju aplikacija za ovu fabriku.", Toast.LENGTH_LONG).show();
+                showAlert("Dozvola potrebna", "Molimo omogućite instalaciju aplikacija za ovu fabriku.");
                 Uri settingsUri = Uri.parse("package:" + getPackageName());
                 Intent settingsIntent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, settingsUri);
                 startActivity(settingsIntent);
