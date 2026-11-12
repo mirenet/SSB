@@ -1,34 +1,33 @@
-name: Build SSB Factory App APK
+name: Build Android APK
 
 on:
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Izvuci kod
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Postavi Java SDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Postavi Gradle 8.2 Wrapper
-        run: |
-          gradle wrapper --gradle-version 8.2 --distribution-type bin
-          chmod +x gradlew
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.5'
 
-      - name: Pokreni Gradle Build (Debug APK)
-        run: ./gradlew assembleDebug
+    - name: Build APK with Gradle
+      run: gradle assembleDebug
 
-      - name: Sačuvaj APK kao Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ssb-factory-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
