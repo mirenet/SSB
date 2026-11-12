@@ -2,6 +2,7 @@ package com.example.ssb;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -45,7 +46,13 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        webView = new WebView(this);
+        // Povezujemo se sa activity_main.xml layout-om umesto dinamičkog kreiranja
+        setContentView(R.layout.activity_main);
+
+        webView = findViewById(R.id.webview);
+        
+        // Ključno: Postavljamo crnu boju pozadine da sprečimo beli bljesak pri pokretanju
+        webView.setBackgroundColor(Color.BLACK);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
         
@@ -54,7 +61,6 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient());
         
         webView.loadUrl("file:///android_asset/index.html");
-        setContentView(webView);
     }
 
     public class WebAppInterface {
