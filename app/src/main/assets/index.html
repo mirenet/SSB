@@ -7,7 +7,7 @@
 
 <style>
 :root{
-    --main-background: #070707;
+    --main-background: #000000;
     --btn-accent: #CBD868;
     --btn-hover: #A4A25C;
     --btn-active: #8C7F6F;
@@ -331,6 +331,7 @@ const iconFileInput = document.getElementById("iconFileInput");
 
 const createBtn = document.getElementById("createBtn");
 const createBtnText = document.getElementById("createBtnText");
+const closeBtn = document.getElementById("closeBtn");
 
 let base64Icon = "";
 let htmlFileContent = "";
@@ -349,7 +350,6 @@ mobilView: true,
 background: false
 };`;
 
-// Inicijalizacija config text area-e
 configTextArea.value = DEFAULT_CONFIG_TEXT;
 
 document.getElementById("openConfigBtn").addEventListener("click", () => {
@@ -367,6 +367,14 @@ document.getElementById("saveConfigBtn").addEventListener("click", () => {
     mainPopup.style.display = "flex";
 });
 
+closeBtn.addEventListener("click", () => {
+    if (window.AndroidBridge && typeof window.AndroidBridge.closeApp === 'function') {
+        window.AndroidBridge.closeApp();
+    } else {
+        window.close();
+    }
+});
+
 browseFileBtn.addEventListener("click", () => {
     htmlFileInput.click();
 });
@@ -376,7 +384,6 @@ htmlFileInput.addEventListener("change", (e) => {
         const file = e.target.files[0];
         startUrlInput.value = file.name;
         
-        // Čitamo sadržaj lokalnog HTML fajla da ga prosledimo aplikaciji
         const reader = new FileReader();
         reader.onload = function(event) {
             htmlFileContent = event.target.result;
@@ -394,14 +401,13 @@ iconFileInput.addEventListener("change", (e) => {
         const file = e.target.files[0];
         const reader = new FileReader();
         reader.onload = function(uploadEvent) {
-            base64Icon = uploadEvent.target.result; // Čuvamo Base64 ikonice
+            base64Icon = uploadEvent.target.result;
             iconPreviewBtn.innerHTML = `<img src="${base64Icon}" alt="Icon">`;
         };
         reader.readAsDataURL(file);
     }
 });
 
-// Klik na Create dugme
 let appState = "create"; // create, working, install
 
 createBtn.addEventListener("click", () => {
@@ -420,9 +426,10 @@ createBtn.addEventListener("click", () => {
         createBtnText.innerText = "Working...";
         createBtn.style.opacity = "0.7";
 
-        // Pozivamo Android kod (ako postoji most) ili simuliramo
+        let finalDataToSend = htmlFileContent ? htmlFileContent : startUrl;
+
         if (window.AndroidBridge) {
-            window.AndroidBridge.startCreatingApp(appName, packageName, base64Icon, htmlFileContent || startUrl, configContent);
+            window.AndroidBridge.startCreatingApp(appName, packageName, base64Icon, finalDataToSend, configContent);
         } else {
             console.log("AndroidBridge nije dostupan (test u browseru)");
         }
@@ -433,7 +440,6 @@ createBtn.addEventListener("click", () => {
     }
 });
 
-// Funkcija koju Android poziva kada završi proces gradnje
 function setAppReadyForInstall() {
     appState = "install";
     createBtnText.innerText = "Install";
