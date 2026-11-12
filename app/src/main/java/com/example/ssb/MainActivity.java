@@ -10,7 +10,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -148,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
         
         try {
             JSONObject jsonBody = new JSONObject();
-            jsonBody.put("event_type", "build-app"); // GitHub Repository Dispatch tip
+            jsonBody.put("event_type", "build-app");
             
             JSONObject clientPayload = new JSONObject();
             clientPayload.put("app_name", appName != null ? appName : "");
@@ -161,13 +160,13 @@ public class MainActivity extends AppCompatActivity {
 
             RequestBody body = RequestBody.create(jsonBody.toString(), MediaType.parse("application/json; charset=utf-8"));
             
-            // Ispravan GitHub URL za dispatches
             String url = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches";
             
             Request request = new Request.Builder()
                     .url(url)
                     .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
                     .addHeader("Accept", "application/vnd.github+json")
+                    .addHeader("User-Agent", "SSBFactory-App") // Obavezno zaglavlje za GitHub API
                     .post(body)
                     .build();
 
@@ -175,23 +174,23 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     e.printStackTrace();
-                    showAlert("Greška mreže", "Neuspešno slanje zahteva: " + e.getMessage());
+                    showAlert("Mrežna greška", e.getMessage());
                 }
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
+                    String responseBody = response.body() != null ? response.body().string() : "";
                     if (response.isSuccessful()) {
-                        showAlert("Uspeh!", "Zahtev poslat na GitHub! Pokrenuta je gradnja.");
+                        showAlert("Uspeh!", "Zahtev je uspešno poslat na GitHub!");
                         startCheckingBuildStatus();
                     } else {
-                        String errBody = response.body() != null ? response.body().string() : "Nepoznato";
-                        showAlert("GitHub Greška", "Kod: " + response.code() + "\nOdgovor: " + errBody);
+                        showAlert("GitHub Status " + response.code(), responseBody);
                     }
                 }
             });
         } catch (Exception e) {
             e.printStackTrace();
-            showAlert("Izuzetak", "Greška: " + e.getMessage());
+            showAlert("Izuzetak", e.getMessage());
         }
     }
 
@@ -211,6 +210,7 @@ public class MainActivity extends AppCompatActivity {
                 .url("https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/actions/runs?per_page=1")
                 .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
                 .addHeader("Accept", "application/vnd.github+json")
+                .addHeader("User-Agent", "SSBFactory-App")
                 .build();
 
         client.newCall(request).enqueue(new Callback() {
@@ -254,6 +254,7 @@ public class MainActivity extends AppCompatActivity {
                 .url(artifactsUrl)
                 .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
                 .addHeader("Accept", "application/vnd.github+json")
+                .addHeader("User-Agent", "SSBFactory-App")
                 .build();
 
         client.newCall(request).enqueue(new Callback() {
@@ -284,6 +285,7 @@ public class MainActivity extends AppCompatActivity {
                 .url(zipUrl)
                 .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
                 .addHeader("Accept", "application/vnd.github+json")
+                .addHeader("User-Agent", "SSBFactory-App")
                 .build();
 
         client.newCall(request).enqueue(new Callback() {
