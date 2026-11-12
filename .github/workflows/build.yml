@@ -24,6 +24,11 @@ jobs:
       with:
         gradle-version: '8.5'
 
+    - name: Generisi Gradle Wrapper ako nedostaje
+      run: |
+        gradle wrapper --gradle-version 8.5
+        chmod +x gradlew
+
     - name: Build APK with Gradle
       run: ./gradlew assembleDebug
 
