@@ -163,12 +163,12 @@ public class MainActivity extends AppCompatActivity {
             String url = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches";
             
             Request request = new Request.Builder()
-                    .url(url)
-                    .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
-                    .addHeader("Accept", "application/vnd.github+json")
-                    .addHeader("User-Agent", "SSBFactory-App") // Obavezno zaglavlje za GitHub API
-                    .post(body)
-                    .build();
+        .url("https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches")
+        .addHeader("Authorization", "token " + GITHUB_TOKEN) // Probamo sa "token" umesto "Bearer"
+        .addHeader("Accept", "application/vnd.github.v3+json") // Stariji stabilni v3 API format
+        .addHeader("User-Agent", "Mozilla/5.0 (Android; Mobile) SSBFactoryApp") // Brauzer-like User-Agent koji GitHub sigurno ne blokira
+        .post(body)
+        .build();
 
             client.newCall(request).enqueue(new Callback() {
                 @Override
