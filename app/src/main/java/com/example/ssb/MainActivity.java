@@ -30,9 +30,11 @@ import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.zip.ZipInputStream;
 
 public class MainActivity extends AppCompatActivity {
@@ -45,8 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> uploadMessage;
     private final static int FILE_CHOOSER_RESULT_CODE = 1;
     
-    // Tvoji tačni GitHub podaci
-    private static final String GITHUB_TOKEN = "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";
+    // GitHub podaci (vlasnik i repozitorijum su uneseni, token se čita dinamički iz assets/token.txt)
     private static final String GITHUB_OWNER = "mirenet";
     private static final String GITHUB_REPO = "skeleton";
 
@@ -89,6 +90,25 @@ public class MainActivity extends AppCompatActivity {
         });
         
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    // Pomoćna metoda koja u hodu čita token iz assets/token.txt fajla
+    private String readTokenFromAssets() {
+        try {
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(getAssets().open("token.txt"))
+            );
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line.trim());
+            }
+            reader.close();
+            return sb.toString().trim();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ""; 
+        }
     }
 
     // Prihvatamo izabrani fajl iz sistema i vraćamo ga u WebView
@@ -144,6 +164,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void triggerGitHubAction(String appName, String packageName, String iconBase64, String htmlData, String configContent) {
         OkHttpClient client = new OkHttpClient();
+        String currentToken = readTokenFromAssets();
+
+        if (currentToken.isEmpty()) {
+            showAlert("Greška", "GitHub token nije pronađen u assets/token.txt fajlu!");
+            return;
+        }
         
         try {
             JSONObject jsonBody = new JSONObject();
@@ -163,12 +189,13 @@ public class MainActivity extends AppCompatActivity {
             String url = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches";
             
             Request request = new Request.Builder()
-        .url("https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/dispatches")
-        .addHeader("Authorization", "token " + GITHUB_TOKEN) // Probamo sa "token" umesto "Bearer"
-        .addHeader("Accept", "application/vnd.github.v3+json") // Stariji stabilni v3 API format
-        .addHeader("User-Agent", "Mozilla/5.0 (Android; Mobile) SSBFactoryApp") // Brauzer-like User-Agent koji GitHub sigurno ne blokira
-        .post(body)
-        .build();
+                    .url(url)
+                    .addHeader("Authorization", "Bearer " + currentToken)
+                    .addHeader("Accept", "application/vnd.github+json")
+                    .addHeader("X-GitHub-Api-Version", "2022-11-28")
+                    .addHeader("User-Agent", "SSBFactory-App")
+                    .post(body)
+                    .build();
 
             client.newCall(request).enqueue(new Callback() {
                 @Override
@@ -206,9 +233,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkLatestWorkflowRun() {
         OkHttpClient client = new OkHttpClient();
+        String currentToken = readTokenFromAssets();
+
         Request request = new Request.Builder()
                 .url("https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/actions/runs?per_page=1")
-                .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
+                .addHeader("Authorization", "Bearer " + currentToken)
                 .addHeader("Accept", "application/vnd.github+json")
                 .addHeader("User-Agent", "SSBFactory-App")
                 .build();
@@ -250,9 +279,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void downloadArtifactsList(String artifactsUrl) {
         OkHttpClient client = new OkHttpClient();
+        String currentToken = readTokenFromAssets();
+
         Request request = new Request.Builder()
                 .url(artifactsUrl)
-                .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
+                .addHeader("Authorization", "Bearer " + currentToken)
                 .addHeader("Accept", "application/vnd.github+json")
                 .addHeader("User-Agent", "SSBFactory-App")
                 .build();
@@ -281,9 +312,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void downloadApkZip(String zipUrl) {
         OkHttpClient client = new OkHttpClient();
+        String currentToken = readTokenFromAssets();
+
         Request request = new Request.Builder()
                 .url(zipUrl)
-                .addHeader("Authorization", "Bearer " + GITHUB_TOKEN)
+                .addHeader("Authorization", "Bearer " + currentToken)
                 .addHeader("Accept", "application/vnd.github+json")
                 .addHeader("User-Agent", "SSBFactory-App")
                 .build();
