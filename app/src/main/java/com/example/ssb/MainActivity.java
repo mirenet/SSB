@@ -147,8 +147,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void startCreatingApp(String appName, String packageName, String iconBase64, String htmlData, String configContent) {
-            triggerGitHubAction(appName, packageName, iconBase64, htmlData, configContent);
+        public void startCreatingApp(String appName, String packageName, String iconBase64, String finalDataToSend, String configContent) {
+            String startUrl = "";
+            String htmlData = "";
+
+            if (finalDataToSend != null && (finalDataToSend.startsWith("http://") || finalDataToSend.startsWith("https://"))) {
+                startUrl = finalDataToSend;
+            } else {
+                htmlData = finalDataToSend;
+            }
+
+            triggerGitHubAction(appName, packageName, iconBase64, htmlData, startUrl, configContent);
         }
 
         @JavascriptInterface
@@ -162,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void triggerGitHubAction(String appName, String packageName, String iconBase64, String htmlData, String configContent) {
+    private void triggerGitHubAction(String appName, String packageName, String iconBase64, String htmlData, String startUrl, String configContent) {
         OkHttpClient client = new OkHttpClient();
         String currentToken = readTokenFromAssets();
 
@@ -180,6 +189,7 @@ public class MainActivity extends AppCompatActivity {
             clientPayload.put("package_name", packageName != null ? packageName : "");
             clientPayload.put("icon_base64", iconBase64 != null ? iconBase64 : "");
             clientPayload.put("html_data", htmlData != null ? htmlData : "");
+            clientPayload.put("start_url", startUrl != null ? startUrl : "");
             clientPayload.put("config_content", configContent != null ? configContent : "");
             
             jsonBody.put("client_payload", clientPayload);
