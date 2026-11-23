@@ -30,19 +30,16 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
-import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -50,8 +47,6 @@ import java.util.zip.Adler32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-
-import javax.security.auth.x500.X500Principal;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -241,9 +236,9 @@ public class MainActivity extends AppCompatActivity {
                 deleteRecursive(metaInf);
             }
 
-            // Ažuriranje startURL i appConfig u assets fajlovima ako postoje
+            // Ažuriranje assets/appConfig.js i startURL
             if (!startUrl.isEmpty() || !configContent.isEmpty()) {
-                logToUi("[INFO] Updating assets configuration and startURL..");
+                logToUi("[INFO] Updating assets/appConfig.js and startURL..");
                 updateAssetsConfig(extractedDir, startUrl, configContent);
             }
 
@@ -293,30 +288,29 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateAssetsConfig(File extractedDir, String startUrl, String configContent) throws IOException {
         File assetsDir = new File(extractedDir, "assets");
-        if (!assetsDir.exists()) return;
-
-        List<File> files = new ArrayList<>();
-        collectFiles(assetsDir, files);
-
-        for (File f : files) {
-            String name = f.getName();
-            if (name.equals("appConfig.js") || name.endsWith(".js") || name.endsWith(".json")) {
-                String content = readTextFile(f);
-                String updated = content;
-
-                if (!configContent.isEmpty() && name.equals("appConfig.js")) {
-                    updated = configContent;
-                }
-                if (!startUrl.isEmpty()) {
-                    updated = updated.replaceAll("(startURL\\s*:\\s*\")[^\"]*(\")", "$1" + startUrl + "$2");
-                    updated = updated.replaceAll("(startUrl\\s*:\\s*\")[^\"]*(\")", "$1" + startUrl + "$2");
-                }
-
-                if (!updated.equals(content)) {
-                    writeTextFile(f, updated);
-                }
-            }
+        if (!assetsDir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            assetsDir.mkdirs();
         }
+
+        File configFile = new File(assetsDir, "appConfig.js");
+        String finalContent;
+
+        if (!configContent.isEmpty()) {
+            finalContent = configContent;
+        } else if (configFile.exists()) {
+            finalContent = readTextFile(configFile);
+        } else {
+            return;
+        }
+
+        if (!startUrl.isEmpty()) {
+            finalContent = finalContent.replaceAll("(startURL\\s*:\\s*\")[^\"]*(\")", "$1" + startUrl + "$2");
+            finalContent = finalContent.replaceAll("(startUrl\\s*:\\s*\")[^\"]*(\")", "$1" + startUrl + "$2");
+        }
+
+        writeTextFile(configFile, finalContent);
+        logToUi("[INFO] Updated assets/appConfig.js");
     }
 
     private void replaceLauncherIcons(File extractedDir, String iconBase64) throws IOException {
@@ -364,7 +358,6 @@ public class MainActivity extends AppCompatActivity {
                 byte[] dexBytes = readBytesFile(file);
                 if (dexBytes.length < 112) continue;
 
-                // Primer zamene postojećeg paketa ako postoji string iste dužine (npr. com.example.ssb)
                 String[] candidates = {"com.example.ssb", "com.google.app"};
                 boolean changed = false;
 
@@ -465,13 +458,10 @@ public class MainActivity extends AppCompatActivity {
             keyStore.load(null, password);
         }
 
-        // Generisanje samopotpisanog RSA ključa ako keystore još ne postoji
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
 
-        // Za produkcioni/stabilni potpis u praksi je bolje uvesti sopstveni keystore fajl.
-        // Ovde pravimo X.509 sertifikat preko BouncyCastle/KeyStore ako je dostupan, ili bacamo jasnu poruku.
         throw new IllegalStateException(
                 "No pre-generated signer.jks found at " + ksFile.getAbsolutePath()
                         + ". Place your .jks keystore there or generate one with keytool."
