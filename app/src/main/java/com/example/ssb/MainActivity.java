@@ -4,6 +4,8 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -39,6 +41,7 @@ import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
@@ -62,6 +65,9 @@ public class MainActivity extends AppCompatActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private ValueCallback<Uri[]> uploadMessage;
 
+    private volatile String detectedPackageName = "";
+    private volatile String detectedAppName = "";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,7 +80,12 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setAllowFileAccess(true);
 
         webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                executor.execute(() -> loadDefaultSkeletonMetadata());
+            }
+        });
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -124,6 +135,49 @@ public class MainActivity extends AppCompatActivity {
         executor.shutdownNow();
     }
 
+    private void loadDefaultSkeletonMetadata() {
+        try {
+            File defaultApk = new File(getCacheDir(), "current_source.apk");
+            try (InputStream in = getAssets().open("skeleton.apk");
+                 FileOutputStream out = new FileOutputStream(defaultApk)) {
+                copyStream(in, out);
+            }
+            inspectApkFile(defaultApk);
+        } catch (Exception e) {
+            e.printStackTrace();
+            logToUi("[WARN] Could not read skeleton.apk metadata: " + e.getMessage());
+        }
+    }
+
+    private void inspectApkFile(File apkFile) {
+        if (apkFile == null || !apkFile.exists()) return;
+        PackageManager pm = getPackageManager();
+        PackageInfo info = pm.getPackageArchiveInfo(apkFile.getAbsolutePath(), 0);
+        if (info == null) return;
+
+        String pkgName = info.packageName != null ? info.packageName : "";
+        String label = "";
+        if (info.applicationInfo != null) {
+            info.applicationInfo.sourceDir = apkFile.getAbsolutePath();
+            info.applicationInfo.publicSourceDir = apkFile.getAbsolutePath();
+            CharSequence loadedLabel = info.applicationInfo.loadLabel(pm);
+            if (loadedLabel != null) {
+                label = loadedLabel.toString();
+            }
+        }
+
+        detectedPackageName = pkgName;
+        detectedAppName = label;
+
+        final String safeLabel = label.replace("\\", "\\\\").replace("'", "\\'");
+        final String safePkg = pkgName.replace("\\", "\\\\").replace("'", "\\'");
+
+        mainHandler.post(() -> webView.evaluateJavascript(
+                "setApkMetadata('" + safeLabel + "', '" + safePkg + "');",
+                null
+        ));
+    }
+
     private void logToUi(String message) {
         mainHandler.post(() -> {
             String escaped = message
@@ -161,6 +215,29 @@ public class MainActivity extends AppCompatActivity {
 
         WebAppInterface(Context c) {
             mContext = c;
+        }
+
+        @JavascriptInterface
+        public void inspectImportedApk(String importedApkBase64) {
+            if (importedApkBase64 == null || importedApkBase64.trim().isEmpty()) return;
+            executor.execute(() -> {
+                try {
+                    File importedFile = new File(getCacheDir(), "current_source.apk");
+                    byte[] bytes = Base64.decode(importedApkBase64.trim(), Base64.DEFAULT);
+                    try (FileOutputStream fos = new FileOutputStream(importedFile)) {
+                        fos.write(bytes);
+                    }
+                    inspectApkFile(importedFile);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    logToUi("[WARN] Failed to inspect imported APK: " + e.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void reloadSkeletonMetadata() {
+            executor.execute(() -> loadDefaultSkeletonMetadata());
         }
 
         @JavascriptInterface
@@ -231,6 +308,8 @@ public class MainActivity extends AppCompatActivity {
                 logToUi("[INFO] Loaded skeleton APK from assets/skeleton.apk.");
             }
 
+            inspectApkFile(sourceApk);
+
             File extractedDir = new File(workDir, "extracted");
             logToUi("[INFO] Extracting APK entries..");
             unzipFile(sourceApk, extractedDir);
@@ -250,9 +329,9 @@ public class MainActivity extends AppCompatActivity {
                 replaceLauncherIcons(extractedDir, iconBase64);
             }
 
-            if (!packageName.isEmpty()) {
-                logToUi("[INFO] Checking package string replacements in DEX..");
-                replaceEqualLengthStringsInDex(extractedDir, packageName);
+            if (!packageName.isEmpty() && !detectedPackageName.isEmpty() && !packageName.equals(detectedPackageName)) {
+                logToUi("[INFO] Updating package string in DEX (" + detectedPackageName + " -> " + packageName + ")..");
+                replaceEqualLengthStringsInDex(extractedDir, detectedPackageName, packageName);
             }
 
             if (!appName.isEmpty()) {
@@ -350,29 +429,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void replaceEqualLengthStringsInDex(File extractedDir, String newPackage) throws IOException {
+    private void replaceEqualLengthStringsInDex(File extractedDir, String oldPackage, String newPackage) throws IOException {
+        if (oldPackage.length() != newPackage.length() || oldPackage.equals(newPackage)) {
+            return;
+        }
+
         List<File> allFiles = new ArrayList<>();
         collectFiles(extractedDir, allFiles);
+
+        byte[] oldB = oldPackage.getBytes(StandardCharsets.UTF_8);
+        byte[] newB = newPackage.getBytes(StandardCharsets.UTF_8);
 
         for (File file : allFiles) {
             if (file.getName().startsWith("classes") && file.getName().endsWith(".dex")) {
                 byte[] dexBytes = readBytesFile(file);
                 if (dexBytes.length < 112) continue;
 
-                String[] candidates = {"com.example.ssb", "com.google.app"};
-                boolean changed = false;
-
-                for (String oldPkg : candidates) {
-                    if (oldPkg.length() == newPackage.length() && !oldPkg.equals(newPackage)) {
-                        byte[] oldB = oldPkg.getBytes(StandardCharsets.UTF_8);
-                        byte[] newB = newPackage.getBytes(StandardCharsets.UTF_8);
-                        if (replaceByteSequence(dexBytes, oldB, newB)) {
-                            changed = true;
-                        }
-                    }
-                }
-
-                if (changed) {
+                if (replaceByteSequence(dexBytes, oldB, newB)) {
                     recalculateDexHashes(dexBytes);
                     writeBytesFile(file, dexBytes);
                 }
@@ -473,7 +546,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private X509Certificate generateSelfSignedDebugCert(KeyPair keyPair) throws Exception {
-        // Pokušaj kreiranja X.509 sertifikata preko BouncyCastle ako je dostupan na classpath-u
         try {
             Class<?> x500NameClass = Class.forName("org.bouncycastle.asn1.x500.X500Name");
             Constructor<?> x500Ctor = x500NameClass.getConstructor(String.class);
@@ -490,7 +562,7 @@ public class MainActivity extends AppCompatActivity {
                     Date.class,
                     Date.class,
                     x500NameClass,
-                    java.security.PublicKey.class
+                    PublicKey.class
             );
             Object certBuilder = builderCtor.newInstance(
                     issuer, serial, notBefore, notAfter, issuer, keyPair.getPublic()
@@ -510,7 +582,7 @@ public class MainActivity extends AppCompatActivity {
             return (X509Certificate) getCert.invoke(converter, holder);
         } catch (Exception e) {
             throw new IllegalStateException(
-                    "Add BouncyCastle (org.bouncycastle:bcpkix-jdk15to18) or provide a debug certificate to generate an in-memory X.509 debug cert.",
+                    "Add org.bouncycastle:bcpkix-jdk15to18 to generate an in-memory X.509 debug certificate.",
                     e
             );
         }
