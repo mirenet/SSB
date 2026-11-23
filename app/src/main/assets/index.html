@@ -490,7 +490,7 @@
 
         <div class="field-group">
             <label class="label">Package</label>
-            <input type="text" id="appPackage" class="input-field" value="com.google.app">
+            <input type="text" id="appPackage" class="input-field" value="com.google.app" maxlength="14" oninput="enforcePackageLimit(this)">
         </div>
 
         <div class="field-group">
@@ -571,6 +571,13 @@ background: false
         let selectedIconBase64 = "";
 
         window.addEventListener('DOMContentLoaded', () => {
+            const pkgInput = document.getElementById('appPackage');
+            const lockedMax = parseInt(pkgInput.getAttribute('maxlength') || String(pkgInput.value.length), 10);
+            pkgInput.dataset.maxLen = String(lockedMax);
+            if (pkgInput.value.length > lockedMax) {
+                pkgInput.value = pkgInput.value.slice(0, lockedMax);
+            }
+
             const savedConfig = localStorage.getItem('appConfigText');
             if (savedConfig) {
                 document.getElementById('configContent').value = savedConfig;
@@ -582,6 +589,13 @@ background: false
                 document.getElementById('sdkMax').value = localStorage.getItem('sdkMax');
             }
         });
+
+        function enforcePackageLimit(inputEl) {
+            const maxLen = parseInt(inputEl.dataset.maxLen || inputEl.getAttribute('maxlength') || '14', 10);
+            if (inputEl.value.length > maxLen) {
+                inputEl.value = inputEl.value.slice(0, maxLen);
+            }
+        }
 
         function autoSaveSettings() {
             const min = document.getElementById('sdkMin').value.trim();
@@ -674,7 +688,9 @@ background: false
             const installBtn = document.getElementById('installBtn');
 
             const appName = document.getElementById('appName').value.trim();
-            const appPackage = document.getElementById('appPackage').value.trim();
+            const pkgEl = document.getElementById('appPackage');
+            enforcePackageLimit(pkgEl);
+            const appPackage = pkgEl.value.trim();
             const appUrl = document.getElementById('appUrl').value.trim();
             const configContent = document.getElementById('configContent').value;
             const sdkMin = document.getElementById('sdkMin').value.trim();
@@ -707,7 +723,7 @@ background: false
             setTimeout(() => appendLog("[INFO] Updating startURL and appConfig values in assets/.."), 1150);
             setTimeout(() => appendLog("[INFO] Updating app name, package name, and SDK values.."), 1550);
             setTimeout(() => appendLog("[INFO] Repacking and aligning entries inside APK.."), 2000);
-            setTimeout(() => appendLog("[SIGN] Signing output APK (apksig / debug key).."), 2450);
+            setTimeout(() => appendLog("[SIGN] Signing output APK (debug key).."), 2450);
             setTimeout(() => {
                 appendLog("[SUCCESS] APK ready for installation!");
                 setAppReadyForInstall();
