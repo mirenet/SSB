@@ -567,6 +567,8 @@ background: false
 
     <script>
         let selectedApkName = "assets/skeleton.apk";
+        let importedApkBase64 = "";
+        let selectedIconBase64 = "";
 
         window.addEventListener('DOMContentLoaded', () => {
             const savedConfig = localStorage.getItem('appConfigText');
@@ -614,7 +616,13 @@ background: false
             const file = event.target.files[0];
             if (file) {
                 selectedApkName = file.name;
-                appendLog(`[INFO] Imported APK: ${file.name}`);
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const result = e.target.result || "";
+                    importedApkBase64 = result.includes(",") ? result.split(",")[1] : result;
+                    appendLog(`[INFO] Imported APK: ${file.name}`);
+                };
+                reader.readAsDataURL(file);
             }
         }
 
@@ -623,8 +631,9 @@ background: false
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
+                    selectedIconBase64 = e.target.result || "";
                     const btn = document.getElementById('iconInputBtn');
-                    btn.innerHTML = `<img src="${e.target.result}" alt="Icon">`;
+                    btn.innerHTML = `<img src="${selectedIconBase64}" alt="Icon">`;
                     btn.style.boxShadow = "0 0 0 0.6px #CBD868";
                 };
                 reader.readAsDataURL(file);
@@ -637,13 +646,39 @@ background: false
             logsBox.scrollTop = logsBox.scrollHeight;
         }
 
+        function setAppReadyForInstall() {
+            const statusText = document.getElementById('statusText');
+            const spinner = document.getElementById('spinner');
+            const installBtn = document.getElementById('installBtn');
+
+            statusText.textContent = "Status: SUCCESS";
+            statusText.style.color = "#68D87C";
+            spinner.style.display = "none";
+            installBtn.classList.add('active');
+            installBtn.disabled = false;
+        }
+
+        function setBuildError(msg) {
+            const statusText = document.getElementById('statusText');
+            const spinner = document.getElementById('spinner');
+            appendLog(`[ERROR] ${msg}`);
+            statusText.textContent = "Status: ERROR";
+            statusText.style.color = "#D94242";
+            spinner.style.display = "none";
+        }
+
         function startBuild() {
             const statusText = document.getElementById('statusText');
             const spinner = document.getElementById('spinner');
             const logsBox = document.getElementById('logsBox');
             const installBtn = document.getElementById('installBtn');
-            const sdkMin = document.getElementById('sdkMin').value.trim() || "manifest";
-            const sdkMax = document.getElementById('sdkMax').value.trim() || "manifest";
+
+            const appName = document.getElementById('appName').value.trim();
+            const appPackage = document.getElementById('appPackage').value.trim();
+            const appUrl = document.getElementById('appUrl').value.trim();
+            const configContent = document.getElementById('configContent').value;
+            const sdkMin = document.getElementById('sdkMin').value.trim();
+            const sdkMax = document.getElementById('sdkMax').value.trim();
 
             installBtn.classList.remove('active');
             installBtn.disabled = true;
@@ -651,7 +686,21 @@ background: false
             statusText.textContent = "Status: Working...";
             statusText.style.color = "#D94242";
             spinner.style.display = "block";
-            logsBox.innerHTML = `[INFO] Package source: ${selectedApkName} (min:${sdkMin}, max:${sdkMax})`;
+            logsBox.innerHTML = `[INFO] Package source: ${selectedApkName} (min:${sdkMin || "manifest"}, max:${sdkMax || "manifest"})`;
+
+            if (window.AndroidBridge && typeof window.AndroidBridge.startCreatingApp === "function") {
+                window.AndroidBridge.startCreatingApp(
+                    appName,
+                    appPackage,
+                    selectedIconBase64,
+                    appUrl,
+                    configContent,
+                    sdkMin,
+                    sdkMax,
+                    importedApkBase64
+                );
+                return;
+            }
 
             setTimeout(() => appendLog("[INFO] Extracting APK archive to working directory.."), 350);
             setTimeout(() => appendLog("[INFO] Scaling and replacing icons in res/.."), 750);
@@ -661,11 +710,7 @@ background: false
             setTimeout(() => appendLog("[SIGN] Signing output APK (apksig / debug key).."), 2450);
             setTimeout(() => {
                 appendLog("[SUCCESS] APK ready for installation!");
-                statusText.textContent = "Status: SUCCESS";
-                statusText.style.color = "#68D87C";
-                spinner.style.display = "none";
-                installBtn.classList.add('active');
-                installBtn.disabled = false;
+                setAppReadyForInstall();
             }, 2900);
         }
 
@@ -674,6 +719,10 @@ background: false
             const spinner = document.getElementById('spinner');
             const logsBox = document.getElementById('logsBox');
             const installBtn = document.getElementById('installBtn');
+
+            selectedApkName = "assets/skeleton.apk";
+            importedApkBase64 = "";
+            document.getElementById('apkFileInput').value = "";
 
             statusText.textContent = "Status: OFF";
             statusText.style.color = "#D94242";
@@ -685,10 +734,10 @@ background: false
         }
 
         function installApp() {
-            if (window.AndroidBridge && typeof window.AndroidBridge.installApk === "function") {
-                window.AndroidBridge.installApk();
+            if (window.AndroidBridge && typeof window.AndroidBridge.installApp === "function") {
+                window.AndroidBridge.installApp();
             } else {
-                alert("Connect AndroidBridge.installApk() to start installation.");
+                alert("Connect AndroidBridge.installApp() to start installation.");
             }
         }
     </script>
