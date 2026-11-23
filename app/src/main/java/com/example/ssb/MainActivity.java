@@ -30,16 +30,21 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -230,25 +235,21 @@ public class MainActivity extends AppCompatActivity {
             logToUi("[INFO] Extracting APK entries..");
             unzipFile(sourceApk, extractedDir);
 
-            // Izbacujemo stari META-INF potpis da bi se napravio nov potpis
             File metaInf = new File(extractedDir, "META-INF");
             if (metaInf.exists()) {
                 deleteRecursive(metaInf);
             }
 
-            // Ažuriranje assets/appConfig.js i startURL
             if (!startUrl.isEmpty() || !configContent.isEmpty()) {
                 logToUi("[INFO] Updating assets/appConfig.js and startURL..");
                 updateAssetsConfig(extractedDir, startUrl, configContent);
             }
 
-            // Skaliranje i zamena ikonica u res/
             if (!iconBase64.isEmpty()) {
                 logToUi("[INFO] Scaling and replacing launcher icons..");
                 replaceLauncherIcons(extractedDir, iconBase64);
             }
 
-            // Ako je zadat novi packageName iste dužine, pokušava bezbednu bajt zamenu u DEX-u
             if (!packageName.isEmpty()) {
                 logToUi("[INFO] Checking package string replacements in DEX..");
                 replaceEqualLengthStringsInDex(extractedDir, packageName);
@@ -266,8 +267,8 @@ public class MainActivity extends AppCompatActivity {
             zipDirectory(extractedDir, unsignedApk);
 
             File signedApk = getOutputApkFile();
-            logToUi("[SIGN] Signing APK using apksig..");
-            signApkWithApksig(unsignedApk, signedApk);
+            logToUi("[SIGN] Signing APK with debug key..");
+            signApkWithDebugKey(unsignedApk, signedApk);
 
             logToUi("[SUCCESS] Signed APK saved: " + signedApk.getName());
             setReadyUi();
@@ -278,8 +279,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private File getOutputApkFile() {
-        File outDir = new File(getExternalFilesDir(null), "builds");
-        if (!outDir.exists()) {
+        File outDir = getExternalFilesDir(null);
+        if (outDir != null && !outDir.exists()) {
             //noinspection ResultOfMethodCallIgnored
             outDir.mkdirs();
         }
@@ -417,11 +418,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void signApkWithApksig(File inputApk, File outputApk) throws Exception {
-        SignerCredentials creds = loadOrCreateSignerCredentials();
+    private void signApkWithDebugKey(File inputApk, File outputApk) throws Exception {
+        SignerCredentials creds = loadOrCreateDebugCredentials();
 
         ApkSigner.SignerConfig signerConfig = new ApkSigner.SignerConfig.Builder(
-                "ssb-signer",
+                "androiddebugkey",
                 creds.privateKey,
                 Collections.singletonList(creds.certificate)
         ).build();
@@ -437,35 +438,82 @@ public class MainActivity extends AppCompatActivity {
         apkSigner.sign();
     }
 
-    private SignerCredentials loadOrCreateSignerCredentials() throws Exception {
-        File ksFile = new File(getFilesDir(), "signer.jks");
-        char[] password = "changeit".toCharArray();
-        String alias = "ssb_key";
+    private SignerCredentials loadOrCreateDebugCredentials() throws Exception {
+        File cacheKeyStore = new File(getCacheDir(), "debug-signer.p12");
+        char[] password = "android".toCharArray();
+        String alias = "androiddebugkey";
 
-        KeyStore keyStore = KeyStore.getInstance("JKS");
-        if (ksFile.exists()) {
-            try (FileInputStream fis = new FileInputStream(ksFile)) {
-                keyStore.load(fis, password);
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        if (cacheKeyStore.exists()) {
+            try (FileInputStream fis = new FileInputStream(cacheKeyStore)) {
+                ks.load(fis, password);
             }
-            if (keyStore.containsAlias(alias)) {
-                PrivateKey key = (PrivateKey) keyStore.getKey(alias, password);
-                Certificate cert = keyStore.getCertificate(alias);
+            if (ks.containsAlias(alias)) {
+                PrivateKey key = (PrivateKey) ks.getKey(alias, password);
+                Certificate cert = ks.getCertificate(alias);
                 if (key != null && cert instanceof X509Certificate) {
                     return new SignerCredentials(key, (X509Certificate) cert);
                 }
             }
         } else {
-            keyStore.load(null, password);
+            ks.load(null, password);
         }
 
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
 
-        throw new IllegalStateException(
-                "No pre-generated signer.jks found at " + ksFile.getAbsolutePath()
-                        + ". Place your .jks keystore there or generate one with keytool."
-        );
+        X509Certificate cert = generateSelfSignedDebugCert(kp);
+        ks.setKeyEntry(alias, kp.getPrivate(), password, new Certificate[]{cert});
+        try (FileOutputStream fos = new FileOutputStream(cacheKeyStore)) {
+            ks.store(fos, password);
+        }
+
+        return new SignerCredentials(kp.getPrivate(), cert);
+    }
+
+    private X509Certificate generateSelfSignedDebugCert(KeyPair keyPair) throws Exception {
+        // Pokušaj kreiranja X.509 sertifikata preko BouncyCastle ako je dostupan na classpath-u
+        try {
+            Class<?> x500NameClass = Class.forName("org.bouncycastle.asn1.x500.X500Name");
+            Constructor<?> x500Ctor = x500NameClass.getConstructor(String.class);
+            Object issuer = x500Ctor.newInstance("CN=Android Debug, O=Android, C=US");
+
+            Date notBefore = new Date(System.currentTimeMillis() - 86400000L);
+            Date notAfter = new Date(System.currentTimeMillis() + 3650L * 86400000L);
+            BigInteger serial = new BigInteger(64, new SecureRandom());
+
+            Class<?> builderClass = Class.forName("org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder");
+            Constructor<?> builderCtor = builderClass.getConstructor(
+                    x500NameClass,
+                    BigInteger.class,
+                    Date.class,
+                    Date.class,
+                    x500NameClass,
+                    java.security.PublicKey.class
+            );
+            Object certBuilder = builderCtor.newInstance(
+                    issuer, serial, notBefore, notAfter, issuer, keyPair.getPublic()
+            );
+
+            Class<?> signerBuilderClass = Class.forName("org.bouncycastle.operator.jcajce.JcaContentSignerBuilder");
+            Object signerBuilder = signerBuilderClass.getConstructor(String.class).newInstance("SHA256withRSA");
+            Method buildSigner = signerBuilderClass.getMethod("build", PrivateKey.class);
+            Object signer = buildSigner.invoke(signerBuilder, keyPair.getPrivate());
+
+            Method buildHolder = builderClass.getMethod("build", Class.forName("org.bouncycastle.operator.ContentSigner"));
+            Object holder = buildHolder.invoke(certBuilder, signer);
+
+            Class<?> converterClass = Class.forName("org.bouncycastle.cert.jcajce.JcaX509CertificateConverter");
+            Object converter = converterClass.getConstructor().newInstance();
+            Method getCert = converterClass.getMethod("getCertificate", Class.forName("org.bouncycastle.cert.X509CertificateHolder"));
+            return (X509Certificate) getCert.invoke(converter, holder);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Add BouncyCastle (org.bouncycastle:bcpkix-jdk15to18) or provide a debug certificate to generate an in-memory X.509 debug cert.",
+                    e
+            );
+        }
     }
 
     private void promptInstall() {
