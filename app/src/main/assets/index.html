@@ -490,7 +490,7 @@
 
         <div class="field-group">
             <label class="label">Package</label>
-            <input type="text" id="appPackage" class="input-field" value="" placeholder="Package name" oninput="enforcePackageLimit(this)">
+            <input type="text" id="appPackage" class="input-field" value="" placeholder="com.example.app">
         </div>
 
         <div class="field-group">
@@ -519,7 +519,7 @@
                 <div class="spinner" id="spinner"></div>
             </div>
 
-            <button type="button" class="code-icon-btn" id="openBuildSettings" title="Manifest SDK min/max" onclick="toggleBuildSettings(event)">
+            <button type="button" class="code-icon-btn" id="openBuildSettings" title="SDK min/max" onclick="toggleBuildSettings(event)">
                 <svg viewBox="0 0 24 24">
                     <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>
                     <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>
@@ -527,8 +527,8 @@
             </button>
 
             <div class="build-settings-dropdown" id="buildSettingsDropdown">
-                <input type="text" id="sdkMin" class="input-field" placeholder="SDK min (manifest)" style="height: 40px; font-size: 12px; padding: 0 10px; margin-bottom: 12px;" oninput="autoSaveSettings()">
-                <input type="text" id="sdkMax" class="input-field" placeholder="SDK max (manifest)" style="height: 40px; font-size: 12px; padding: 0 10px; margin-bottom: 0;" oninput="autoSaveSettings()">
+                <input type="text" id="sdkMin" class="input-field" placeholder="SDK min" style="height: 40px; font-size: 12px; padding: 0 10px; margin-bottom: 12px;" oninput="autoSaveSettings()">
+                <input type="text" id="sdkMax" class="input-field" placeholder="SDK max" style="height: 40px; font-size: 12px; padding: 0 10px; margin-bottom: 0;" oninput="autoSaveSettings()">
             </div>
         </div>
 
@@ -536,7 +536,7 @@
 
         <div class="logs-section">
             <div class="section-title">Build Logs:</div>
-            <div class="logs-box" id="logsBox">Local APK builder ready..<br>Reading metadata from skeleton APK..<br>Click "Create" to modify and sign..</div>
+            <div class="logs-box" id="logsBox">GitHub Actions builder ready..<br>Token loaded from assets/token.txt..<br>Click "Create" to trigger remote Gradle build..</div>
         </div>
 
         <button type="button" class="btn-install" id="installBtn" disabled onclick="installApp()">Install APK</button>
@@ -545,7 +545,7 @@
     <div class="modal" id="configModal">
         <div class="modal-content">
             <div class="modal-header">
-                <span>Config..</span>
+                <span>Config.. (appConfig.js)</span>
                 <button type="button" class="close-modal" id="closeModal">&times;</button>
             </div>
             <textarea class="config-textarea" id="configContent">const config = {
@@ -566,14 +566,13 @@ background: false
     </div>
 
     <script>
-        let selectedApkName = "assets/skeleton.apk";
+        let selectedApkName = "github-source";
         let importedApkBase64 = "";
         let selectedIconBase64 = "";
-        let lockedPackageLength = null;
 
         window.addEventListener('DOMContentLoaded', () => {
             const savedConfig = localStorage.getItem('appConfigText');
-            if (savedConfig) {
+            if (savedConfig && savedConfig.trim().length > 0) {
                 document.getElementById('configContent').value = savedConfig;
             }
             if (localStorage.getItem('sdkMin')) {
@@ -581,6 +580,9 @@ background: false
             }
             if (localStorage.getItem('sdkMax')) {
                 document.getElementById('sdkMax').value = localStorage.getItem('sdkMax');
+            }
+            if (window.AndroidBridge && typeof window.AndroidBridge.requestDefaultConfig === "function") {
+                window.AndroidBridge.requestDefaultConfig();
             }
         });
 
@@ -593,15 +595,14 @@ background: false
             }
             if (typeof packageName === "string" && packageName.length > 0) {
                 pkgInput.value = packageName;
-                lockedPackageLength = packageName.length;
-                pkgInput.setAttribute('maxlength', String(lockedPackageLength));
-                pkgInput.dataset.maxLen = String(lockedPackageLength);
             }
         }
 
-        function enforcePackageLimit(inputEl) {
-            if (lockedPackageLength !== null && inputEl.value.length > lockedPackageLength) {
-                inputEl.value = inputEl.value.slice(0, lockedPackageLength);
+        function setDefaultConfigContent(configText) {
+            if (typeof configText !== "string" || configText.trim().length === 0) return;
+            const savedConfig = localStorage.getItem('appConfigText');
+            if (!savedConfig || savedConfig.trim().length === 0) {
+                document.getElementById('configContent').value = configText;
             }
         }
 
@@ -642,7 +643,7 @@ background: false
                 reader.onload = function(e) {
                     const result = e.target.result || "";
                     importedApkBase64 = result.includes(",") ? result.split(",")[1] : result;
-                    appendLog(`[INFO] Imported APK: ${file.name}`);
+                    appendLog(`[INFO] Selected APK: ${file.name}`);
                     if (window.AndroidBridge && typeof window.AndroidBridge.inspectImportedApk === "function") {
                         window.AndroidBridge.inspectImportedApk(importedApkBase64);
                     }
@@ -699,9 +700,7 @@ background: false
             const installBtn = document.getElementById('installBtn');
 
             const appName = document.getElementById('appName').value.trim();
-            const pkgEl = document.getElementById('appPackage');
-            enforcePackageLimit(pkgEl);
-            const appPackage = pkgEl.value.trim();
+            const appPackage = document.getElementById('appPackage').value.trim();
             const appUrl = document.getElementById('appUrl').value.trim();
             const configContent = document.getElementById('configContent').value;
             const sdkMin = document.getElementById('sdkMin').value.trim();
@@ -713,7 +712,7 @@ background: false
             statusText.textContent = "Status: Working...";
             statusText.style.color = "#D94242";
             spinner.style.display = "block";
-            logsBox.innerHTML = `[INFO] Package source: ${selectedApkName} (min:${sdkMin || "manifest"}, max:${sdkMax || "manifest"})`;
+            logsBox.innerHTML = `[INFO] Triggering GitHub workflow (${selectedApkName}) | min:${sdkMin || "default"}, max:${sdkMax || "default"}`;
 
             if (window.AndroidBridge && typeof window.AndroidBridge.startCreatingApp === "function") {
                 window.AndroidBridge.startCreatingApp(
@@ -729,16 +728,7 @@ background: false
                 return;
             }
 
-            setTimeout(() => appendLog("[INFO] Extracting APK archive to working directory.."), 350);
-            setTimeout(() => appendLog("[INFO] Scaling and replacing icons in res/.."), 750);
-            setTimeout(() => appendLog("[INFO] Updating startURL and appConfig values in assets/.."), 1150);
-            setTimeout(() => appendLog("[INFO] Updating app name, package name, and SDK values.."), 1550);
-            setTimeout(() => appendLog("[INFO] Repacking and aligning entries inside APK.."), 2000);
-            setTimeout(() => appendLog("[SIGN] Signing output APK (debug key).."), 2450);
-            setTimeout(() => {
-                appendLog("[SUCCESS] APK ready for installation!");
-                setAppReadyForInstall();
-            }, 2900);
+            appendLog("[WARN] AndroidBridge not found.");
         }
 
         function resetBuild() {
@@ -747,14 +737,14 @@ background: false
             const logsBox = document.getElementById('logsBox');
             const installBtn = document.getElementById('installBtn');
 
-            selectedApkName = "assets/skeleton.apk";
+            selectedApkName = "github-source";
             importedApkBase64 = "";
             document.getElementById('apkFileInput').value = "";
 
             statusText.textContent = "Status: OFF";
             statusText.style.color = "#D94242";
             spinner.style.display = "none";
-            logsBox.innerHTML = "Local APK builder ready..<br>Use skeleton from assets or import an APK top right..<br>Click \"Create\" to modify and sign..";
+            logsBox.innerHTML = "GitHub Actions builder ready..<br>Token loaded from assets/token.txt..<br>Click \"Create\" to trigger remote Gradle build..";
 
             installBtn.classList.remove('active');
             installBtn.disabled = true;
