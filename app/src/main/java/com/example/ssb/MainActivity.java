@@ -325,13 +325,16 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (!iconBase64.isEmpty()) {
-                logToUi("[INFO] Scaling and replacing launcher icons..");
+                logToUi("[INFO] Scaling and replacing launcher icons, logo.png and back.png..");
                 replaceLauncherIcons(extractedDir, iconBase64);
             }
 
-            if (!packageName.isEmpty() && !detectedPackageName.isEmpty() && !packageName.equals(detectedPackageName)) {
-                logToUi("[INFO] Updating package string in DEX (" + detectedPackageName + " -> " + packageName + ")..");
-                replaceEqualLengthStringsInDex(extractedDir, detectedPackageName, packageName);
+            if (!packageName.isEmpty() && !detectedPackageName.isEmpty()) {
+                String fittedPackage = fitToTargetLength(packageName, detectedPackageName.length());
+                if (!fittedPackage.equals(detectedPackageName)) {
+                    logToUi("[INFO] Updating package (" + detectedPackageName + " -> " + fittedPackage + ")..");
+                    updatePackageInManifestAndDex(extractedDir, detectedPackageName, fittedPackage);
+                }
             }
 
             if (!appName.isEmpty()) {
@@ -354,6 +357,43 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
             setErrorUi(e.getMessage() != null ? e.getMessage() : "Build failed.");
+        }
+    }
+
+    private String fitToTargetLength(String input, int targetLen) {
+        if (targetLen <= 0 || input == null) return input;
+        if (input.length() == targetLen) return input;
+        if (input.length() > targetLen) {
+            return input.substring(0, targetLen);
+        }
+        StringBuilder sb = new StringBuilder(input);
+        // Dopunjava preostala mesta validnim znakom ('a') da zadrži istu dužinu kao originalni paket
+        while (sb.length() < targetLen) {
+            sb.append('a');
+        }
+        return sb.toString();
+    }
+
+    private void updatePackageInManifestAndDex(File extractedDir, String oldPkg, String newPkg) throws IOException {
+        if (oldPkg.length() != newPkg.length() || oldPkg.equals(newPkg)) return;
+
+        File manifestFile = new File(extractedDir, "AndroidManifest.xml");
+        boolean manifestChanged = false;
+        if (manifestFile.exists()) {
+            byte[] manifestBytes = readBytesFile(manifestFile);
+            byte[] oldUtf16 = oldPkg.getBytes(StandardCharsets.UTF_16LE);
+            byte[] newUtf16 = newPkg.getBytes(StandardCharsets.UTF_16LE);
+            if (replaceByteSequence(manifestBytes, oldUtf16, newUtf16)) {
+                writeBytesFile(manifestFile, manifestBytes);
+                manifestChanged = true;
+                logToUi("[INFO] Updated package in binary AndroidManifest.xml (UTF-16LE).");
+            }
+        }
+
+        replaceEqualLengthStringsInDex(extractedDir, oldPkg, newPkg);
+
+        if (!manifestChanged) {
+            logToUi("[WARN] Old package string not matched in binary AndroidManifest.xml.");
         }
     }
 
@@ -407,9 +447,14 @@ public class MainActivity extends AppCompatActivity {
         List<File> allResFiles = new ArrayList<>();
         collectFiles(resDir, allResFiles);
 
+        int replacedCount = 0;
+
         for (File file : allResFiles) {
             String fname = file.getName().toLowerCase();
-            if (fname.contains("ic_launcher") && (fname.endsWith(".png") || fname.endsWith(".webp"))) {
+            boolean isLauncherIcon = fname.contains("ic_launcher") && (fname.endsWith(".png") || fname.endsWith(".webp"));
+            boolean isSplashAsset = "logo.png".equals(fname) || "back.png".equals(fname);
+
+            if (isLauncherIcon || isSplashAsset) {
                 Bitmap existing = BitmapFactory.decodeFile(file.getAbsolutePath());
                 int targetW = (existing != null && existing.getWidth() > 0) ? existing.getWidth() : 192;
                 int targetH = (existing != null && existing.getHeight() > 0) ? existing.getHeight() : 192;
@@ -425,8 +470,11 @@ public class MainActivity extends AppCompatActivity {
                         scaled.compress(Bitmap.CompressFormat.PNG, 100, fos);
                     }
                 }
+                replacedCount++;
             }
         }
+
+        logToUi("[INFO] Replaced " + replacedCount + " image assets (icons, logo.png, back.png).");
     }
 
     private void replaceEqualLengthStringsInDex(File extractedDir, String oldPackage, String newPackage) throws IOException {
