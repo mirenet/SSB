@@ -35,6 +35,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
@@ -44,9 +48,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int FILE_CHOOSER_RESULT_CODE = 1;
     private static final long POLL_INTERVAL_MS = 10_000L;
-    private static final int MAX_POLL_ATTEMPTS = 90; // do 15 minuta
+    private static final int MAX_POLL_ATTEMPTS = 90;
 
-    // TODO: Upisi svoj GitHub username/org, naziv repo-a i granu
     private static final String GITHUB_OWNER = "mirenet";
     private static final String GITHUB_REPO = "skeleton";
     private static final String GITHUB_BRANCH = "main";
@@ -160,11 +163,18 @@ public class MainActivity extends AppCompatActivity {
 
     private String readGitHubToken() throws IOException {
         try (InputStream is = getAssets().open("token.txt")) {
-            String token = readStreamToString(is).trim();
+            String raw = readStreamToString(is);
+            // Ukloni UTF-8 BOM, razmake i nove redove
+            String token = raw.replace("\uFEFF", "").trim();
             if (token.isEmpty()) {
                 throw new IOException("assets/token.txt is empty.");
             }
+            if (token.contains(" ") || token.contains("\n") || token.contains("\r")) {
+                throw new IOException("assets/token.txt contains spaces or multiple lines.");
+            }
             return token;
+        } catch (IOException e) {
+            throw new IOException("Token error (assets/token.txt): " + e.getMessage(), e);
         }
     }
 
@@ -179,7 +189,10 @@ public class MainActivity extends AppCompatActivity {
     ) {
         buildCancelled = false;
         try {
-            if ("YOUR_GITHUB_USERNAME".equals(GITHUB_OWNER) || "YOUR_SKELETON_REPO".equals(GITHUB_REPO)) {
+            if (GITHUB_OWNER == null || GITHUB_OWNER.trim().isEmpty()
+                    || GITHUB_REPO == null || GITHUB_REPO.trim().isEmpty()
+                    || "YOUR_GITHUB_USERNAME".equals(GITHUB_OWNER)
+                    || "YOUR_SKELETON_REPO".equals(GITHUB_REPO)) {
                 throw new IllegalArgumentException("Set GITHUB_OWNER and GITHUB_REPO in MainActivity.java.");
             }
 
@@ -230,11 +243,31 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private long parseIsoToMillis(String isoDate) {
+        if (isoDate == null || isoDate.isEmpty()) return 0L;
+        String[] patterns = {
+                "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+        };
+        for (String pattern : patterns) {
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat(pattern, Locale.US);
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                Date d = sdf.parse(isoDate);
+                if (d != null) return d.getTime();
+            } catch (Exception ignored) {
+            }
+        }
+        return 0L;
+    }
+
     private long pollForCompletedRunId(String token, long dispatchStartTimeMs) throws Exception {
         String runsUrl = "https://api.github.com/repos/"
                 + GITHUB_OWNER + "/" + GITHUB_REPO
                 + "/actions/workflows/" + WORKFLOW_FILE
                 + "/runs?branch=" + GITHUB_BRANCH + "&event=workflow_dispatch&per_page=10";
+
+        long minAllowedTimeMs = dispatchStartTimeMs - 30_000L;
 
         for (int attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt++) {
             if (buildCancelled) {
@@ -250,9 +283,11 @@ public class MainActivity extends AppCompatActivity {
                 for (int i = 0; i < runs.length(); i++) {
                     JSONObject run = runs.optJSONObject(i);
                     if (run == null) continue;
-                    // Uzimamo najnoviji run (prvi koji odgovara ili je noviji od početka slanja uz toleranciju 30s)
-                    targetRun = run;
-                    break;
+                    long createdMs = parseIsoToMillis(run.optString("created_at", ""));
+                    if (createdMs == 0L || createdMs >= minAllowedTimeMs) {
+                        targetRun = run;
+                        break;
+                    }
                 }
             }
 
@@ -341,7 +376,7 @@ public class MainActivity extends AppCompatActivity {
             ZipEntry entry;
             byte[] buffer = new byte[8192];
             while ((entry = zis.getNextEntry()) != null) {
-                if (!entry.isDirectory() && entry.getName().toLowerCase().endsWith(".apk")) {
+                if (!entry.isDirectory() && entry.getName().toLowerCase(Locale.US).endsWith(".apk")) {
                     try (FileOutputStream fos = new FileOutputStream(destApk)) {
                         int len;
                         while ((len = zis.read(buffer)) != -1) {
@@ -361,7 +396,7 @@ public class MainActivity extends AppCompatActivity {
         HttpURLConnection conn = (HttpURLConnection) new URL(endpoint).openConnection();
         conn.setRequestMethod("POST");
         conn.setConnectTimeout(15_000);
-        conn.setReadTimeout(15_000);
+        conn.setReadTimeout(20_000);
         conn.setDoOutput(true);
         conn.setRequestProperty("Authorization", "Bearer " + token);
         conn.setRequestProperty("Accept", "application/vnd.github+json");
@@ -378,7 +413,7 @@ public class MainActivity extends AppCompatActivity {
             InputStream err = conn.getErrorStream();
             String errText = err != null ? readStreamToString(err) : "";
             conn.disconnect();
-            throw new IOException("HTTP " + code + ": " + errText);
+            throw new IOException("GitHub API POST HTTP " + code + ": " + errText.trim());
         }
         conn.disconnect();
         return code;
@@ -388,7 +423,7 @@ public class MainActivity extends AppCompatActivity {
         HttpURLConnection conn = (HttpURLConnection) new URL(endpoint).openConnection();
         conn.setRequestMethod("GET");
         conn.setConnectTimeout(15_000);
-        conn.setReadTimeout(15_000);
+        conn.setReadTimeout(20_000);
         conn.setRequestProperty("Authorization", "Bearer " + token);
         conn.setRequestProperty("Accept", "application/vnd.github+json");
         conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
@@ -399,7 +434,7 @@ public class MainActivity extends AppCompatActivity {
         conn.disconnect();
 
         if (code >= 400) {
-            throw new IOException("HTTP " + code + ": " + body);
+            throw new IOException("GitHub API GET HTTP " + code + ": " + body.trim());
         }
         return body;
     }
@@ -434,7 +469,7 @@ public class MainActivity extends AppCompatActivity {
                 InputStream err = conn.getErrorStream();
                 String errText = err != null ? readStreamToString(err) : "";
                 conn.disconnect();
-                throw new IOException("Download failed (HTTP " + code + "): " + errText);
+                throw new IOException("Download failed (HTTP " + code + "): " + errText.trim());
             }
 
             try (InputStream in = new BufferedInputStream(conn.getInputStream());
