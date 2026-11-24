@@ -613,8 +613,23 @@ background: false
             if (max !== '') localStorage.setItem('sdkMax', max); else localStorage.removeItem('sdkMax');
         }
 
+        function syncUrlIntoConfigTextarea() {
+            const urlVal = document.getElementById('appUrl').value.trim();
+            if (!urlVal) return;
+
+            const cfgTextarea = document.getElementById('configContent');
+            const escapedUrl = urlVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            cfgTextarea.value = cfgTextarea.value.replace(
+                /(\bstartURL\s*:\s*)(["'])[^"']*\2/i,
+                `$1"${escapedUrl}"`
+            );
+        }
+
         const modal = document.getElementById('configModal');
-        document.getElementById('openConfigModal').onclick = () => modal.style.display = 'flex';
+        document.getElementById('openConfigModal').onclick = () => {
+            syncUrlIntoConfigTextarea();
+            modal.style.display = 'flex';
+        };
         document.getElementById('closeModal').onclick = () => modal.style.display = 'none';
         document.getElementById('saveConfig').onclick = () => {
             localStorage.setItem('appConfigText', document.getElementById('configContent').value);
@@ -694,6 +709,8 @@ background: false
         }
 
         function startBuild() {
+            syncUrlIntoConfigTextarea();
+
             const statusText = document.getElementById('statusText');
             const spinner = document.getElementById('spinner');
             const logsBox = document.getElementById('logsBox');
