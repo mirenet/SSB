@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.Adler32;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -367,7 +368,6 @@ public class MainActivity extends AppCompatActivity {
             return input.substring(0, targetLen);
         }
         StringBuilder sb = new StringBuilder(input);
-        // Dopunjava preostala mesta validnim znakom ('a') da zadrži istu dužinu kao originalni paket
         while (sb.length() < targetLen) {
             sb.append('a');
         }
@@ -711,6 +711,19 @@ public class MainActivity extends AppCompatActivity {
             for (File file : files) {
                 String entryName = file.getAbsolutePath().substring(basePath.length()).replace("\\", "/");
                 ZipEntry entry = new ZipEntry(entryName);
+
+                boolean mustStore = "resources.arsc".equals(entryName)
+                        || entryName.endsWith(".so")
+                        || entryName.endsWith(".bin");
+                if (mustStore) {
+                    long size = file.length();
+                    long crc = computeCrc32(file);
+                    entry.setMethod(ZipEntry.STORED);
+                    entry.setSize(size);
+                    entry.setCompressedSize(size);
+                    entry.setCrc(crc);
+                }
+
                 zos.putNextEntry(entry);
                 try (FileInputStream fis = new FileInputStream(file)) {
                     int len;
@@ -721,6 +734,18 @@ public class MainActivity extends AppCompatActivity {
                 zos.closeEntry();
             }
         }
+    }
+
+    private long computeCrc32(File file) throws IOException {
+        CRC32 crc32 = new CRC32();
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = fis.read(buffer)) != -1) {
+                crc32.update(buffer, 0, len);
+            }
+        }
+        return crc32.getValue();
     }
 
     private void collectFiles(File dir, List<File> out) {
