@@ -375,26 +375,76 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updatePackageInManifestAndDex(File extractedDir, String oldPkg, String newPkg) throws IOException {
-        if (oldPkg.length() != newPkg.length() || oldPkg.equals(newPkg)) return;
+        if (oldPkg == null || newPkg == null || oldPkg.isEmpty() || newPkg.isEmpty()) return;
+        if (oldPkg.equals(newPkg) || oldPkg.length() != newPkg.length()) return;
+
+        String oldPrefix = oldPkg + ".";
+        String newPrefix = newPkg + ".";
 
         File manifestFile = new File(extractedDir, "AndroidManifest.xml");
         boolean manifestChanged = false;
         if (manifestFile.exists()) {
             byte[] manifestBytes = readBytesFile(manifestFile);
-            byte[] oldUtf16 = oldPkg.getBytes(StandardCharsets.UTF_16LE);
-            byte[] newUtf16 = newPkg.getBytes(StandardCharsets.UTF_16LE);
-            if (replaceByteSequence(manifestBytes, oldUtf16, newUtf16)) {
+            boolean c1 = replaceByteSequence(
+                    manifestBytes,
+                    oldPrefix.getBytes(StandardCharsets.UTF_16LE),
+                    newPrefix.getBytes(StandardCharsets.UTF_16LE)
+            );
+            boolean c2 = replaceByteSequence(
+                    manifestBytes,
+                    oldPkg.getBytes(StandardCharsets.UTF_16LE),
+                    newPkg.getBytes(StandardCharsets.UTF_16LE)
+            );
+            if (c1 || c2) {
                 writeBytesFile(manifestFile, manifestBytes);
                 manifestChanged = true;
-                logToUi("[INFO] Updated package in binary AndroidManifest.xml (UTF-16LE).");
+                logToUi("[INFO] Updated package & prefix occurrences in AndroidManifest.xml.");
             }
         }
 
-        replaceEqualLengthStringsInDex(extractedDir, oldPkg, newPkg);
-
-        if (!manifestChanged) {
-            logToUi("[WARN] Old package string not matched in binary AndroidManifest.xml.");
+        boolean dexChanged = replaceStringsInDex(extractedDir, oldPkg, newPkg, oldPrefix, newPrefix);
+        if (dexChanged) {
+            logToUi("[INFO] Updated package & prefix occurrences in DEX files.");
         }
+
+        if (!manifestChanged && !dexChanged) {
+            logToUi("[WARN] No matching package strings replaced in manifest or DEX.");
+        }
+    }
+
+    private boolean replaceStringsInDex(
+            File extractedDir,
+            String oldPkg,
+            String newPkg,
+            String oldPrefix,
+            String newPrefix
+    ) throws IOException {
+        List<File> allFiles = new ArrayList<>();
+        collectFiles(extractedDir, allFiles);
+
+        byte[] oldPkgB = oldPkg.getBytes(StandardCharsets.UTF_8);
+        byte[] newPkgB = newPkg.getBytes(StandardCharsets.UTF_8);
+        byte[] oldPrefB = oldPrefix.getBytes(StandardCharsets.UTF_8);
+        byte[] newPrefB = newPrefix.getBytes(StandardCharsets.UTF_8);
+
+        boolean anyChanged = false;
+
+        for (File file : allFiles) {
+            if (file.getName().startsWith("classes") && file.getName().endsWith(".dex")) {
+                byte[] dexBytes = readBytesFile(file);
+                if (dexBytes.length < 112) continue;
+
+                boolean c1 = replaceByteSequence(dexBytes, oldPrefB, newPrefB);
+                boolean c2 = replaceByteSequence(dexBytes, oldPkgB, newPkgB);
+
+                if (c1 || c2) {
+                    recalculateDexHashes(dexBytes);
+                    writeBytesFile(file, dexBytes);
+                    anyChanged = true;
+                }
+            }
+        }
+        return anyChanged;
     }
 
     private File getOutputApkFile() {
@@ -475,30 +525,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         logToUi("[INFO] Replaced " + replacedCount + " image assets (icons, logo.png, back.png).");
-    }
-
-    private void replaceEqualLengthStringsInDex(File extractedDir, String oldPackage, String newPackage) throws IOException {
-        if (oldPackage.length() != newPackage.length() || oldPackage.equals(newPackage)) {
-            return;
-        }
-
-        List<File> allFiles = new ArrayList<>();
-        collectFiles(extractedDir, allFiles);
-
-        byte[] oldB = oldPackage.getBytes(StandardCharsets.UTF_8);
-        byte[] newB = newPackage.getBytes(StandardCharsets.UTF_8);
-
-        for (File file : allFiles) {
-            if (file.getName().startsWith("classes") && file.getName().endsWith(".dex")) {
-                byte[] dexBytes = readBytesFile(file);
-                if (dexBytes.length < 112) continue;
-
-                if (replaceByteSequence(dexBytes, oldB, newB)) {
-                    recalculateDexHashes(dexBytes);
-                    writeBytesFile(file, dexBytes);
-                }
-            }
-        }
     }
 
     private boolean replaceByteSequence(byte[] data, byte[] target, byte[] replacement) {
