@@ -129,37 +129,44 @@ jobs:
                   c_text = ""
 
               if start_url and c_text:
-                  c_text = re.sub(r'(startURL\s*:\s*")[^"]*(")', rf'\g<1>{start_url}\g<2>', c_text)
-                  c_text = re.sub(r'(startUrl\s*:\s*")[^"]*(")', rf'\g<1>{start_url}\g<2>', c_text)
+                  c_text = re.sub(
+                      r"""(\bstartURL\s*:\s*['"])[^'"]*(['"])""",
+                      rf"\g<1>{start_url}\g<2>",
+                      c_text,
+                      flags=re.IGNORECASE,
+                  )
 
               cfg_path.write_text(c_text, encoding="utf-8")
 
           if icon_b64:
-              raw = icon_b64.split(",", 1)[1] if "," in icon_b64 else icon_b64
-              img_bytes = base64.b64decode(raw)
-              src_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+              try:
+                  raw = icon_b64.split(",", 1)[1] if "," in icon_b64 else icon_b64
+                  img_bytes = base64.b64decode(raw, validate=False)
+                  src_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
 
-              res_dir = Path("app/src/main/res")
-              if res_dir.exists():
-                  for p in res_dir.rglob("*"):
-                      if not p.is_file():
-                          continue
-                      fname = p.name.lower()
-                      is_target = (
-                          ("ic_launcher" in fname and fname.endswith((".png", ".webp")))
-                          or fname in ("logo.png", "back.png")
-                      )
-                      if is_target:
-                          try:
-                              with Image.open(p) as existing:
-                                  w, h = existing.size
-                          except Exception:
-                              w, h = 192, 192
-                          resized = src_img.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
-                          if fname.endswith(".webp"):
-                              resized.save(p, format="WEBP", lossless=True)
-                          else:
-                              resized.save(p, format="PNG")
+                  res_dir = Path("app/src/main/res")
+                  if res_dir.exists():
+                      for p in res_dir.rglob("*"):
+                          if not p.is_file():
+                              continue
+                          fname = p.name.lower()
+                          is_target = (
+                              ("ic_launcher" in fname and fname.endswith((".png", ".webp")))
+                              or fname in ("logo.png", "back.png")
+                          )
+                          if is_target:
+                              try:
+                                  with Image.open(p) as existing:
+                                      w, h = existing.size
+                              except Exception:
+                                  w, h = 192, 192
+                              resized = src_img.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
+                              if fname.endswith(".webp"):
+                                  resized.save(p, format="WEBP", lossless=True)
+                              else:
+                                  resized.save(p, format="PNG")
+              except Exception as ex:
+                  print(f"[WARN] Icon processing skipped/failed: {ex}")
           EOF
 
       - name: Build APK with Gradle
