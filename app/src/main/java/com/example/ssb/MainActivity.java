@@ -164,7 +164,6 @@ public class MainActivity extends AppCompatActivity {
     private String readGitHubToken() throws IOException {
         try (InputStream is = getAssets().open("token.txt")) {
             String raw = readStreamToString(is);
-            // Ukloni UTF-8 BOM, razmake i nove redove
             String token = raw.replace("\uFEFF", "").trim();
             if (token.isEmpty()) {
                 throw new IOException("assets/token.txt is empty.");
@@ -441,12 +440,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void httpDownloadToFile(String token, String endpoint, File outFile) throws IOException {
         String currentUrl = endpoint;
+        boolean includeAuthHeader = true;
+
         for (int redirects = 0; redirects < 5; redirects++) {
             HttpURLConnection conn = (HttpURLConnection) new URL(currentUrl).openConnection();
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(20_000);
             conn.setReadTimeout(30_000);
-            conn.setRequestProperty("Authorization", "Bearer " + token);
+            if (includeAuthHeader) {
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+            }
             conn.setRequestProperty("Accept", "application/vnd.github+json");
             conn.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
 
@@ -462,6 +465,7 @@ public class MainActivity extends AppCompatActivity {
                     throw new IOException("Redirect without Location header (HTTP " + code + ").");
                 }
                 currentUrl = location;
+                includeAuthHeader = false;
                 continue;
             }
 
