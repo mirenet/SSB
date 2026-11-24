@@ -47,8 +47,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int MAX_POLL_ATTEMPTS = 90; // do 15 minuta
 
     // TODO: Upisi svoj GitHub username/org, naziv repo-a i granu
-    private static final String GITHUB_OWNER = "YOUR_GITHUB_USERNAME";
-    private static final String GITHUB_REPO = "YOUR_SKELETON_REPO";
+    private static final String GITHUB_OWNER = "mirenet";
+    private static final String GITHUB_REPO = "skeleton";
     private static final String GITHUB_BRANCH = "main";
     private static final String WORKFLOW_FILE = "build.yml";
 
