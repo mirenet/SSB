@@ -4,6 +4,35 @@ on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      app_name:
+        description: "App Name (strings.xml)"
+        required: false
+        default: ""
+      package_name:
+        description: "Package Name (applicationId & namespace)"
+        required: false
+        default: ""
+      start_url:
+        description: "Optional startURL override in appConfig.js"
+        required: false
+        default: ""
+      config_content:
+        description: "Full appConfig.js content"
+        required: false
+        default: ""
+      min_sdk:
+        description: "minSdk in app/build.gradle"
+        required: false
+        default: ""
+      max_sdk:
+        description: "targetSdk / compileSdk in app/build.gradle"
+        required: false
+        default: ""
+      icon_base64:
+        description: "Optional PNG/JPG/WEBP base64 icon"
+        required: false
+        default: ""
   repository_dispatch:
     types: [build-app]
 
@@ -12,30 +41,132 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.5'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
 
-    - name: Generisi Gradle Wrapper ako nedostaje
-      run: |
-        gradle wrapper --gradle-version 8.5
-        chmod +x gradlew
+      - name: Generisi Gradle Wrapper ako nedostaje
+        run: |
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 8.5
+          fi
+          chmod +x gradlew
 
-    - name: Build APK with Gradle
-      run: ./gradlew assembleDebug
+      - name: Set up Python & Pillow for image scaling
+        run: python3 -m pip install --upgrade pip pillow
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Apply customizations from workflow inputs
+        env:
+          APP_NAME: ${{ github.event.inputs.app_name }}
+          PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+          START_URL: ${{ github.event.inputs.start_url }}
+          CONFIG_CONTENT: ${{ github.event.inputs.config_content }}
+          MIN_SDK: ${{ github.event.inputs.min_sdk }}
+          MAX_SDK: ${{ github.event.inputs.max_sdk }}
+          ICON_BASE64: ${{ github.event.inputs.icon_base64 }}
+        run: |
+          python3 - <<'EOF'
+          import base64, io, os, re
+          from pathlib import Path
+          from PIL import Image
+
+          app_name = (os.environ.get("APP_NAME") or "").strip()
+          pkg_name = (os.environ.get("PACKAGE_NAME") or "").strip()
+          start_url = (os.environ.get("START_URL") or "").strip()
+          config_content = os.environ.get("CONFIG_CONTENT") or ""
+          min_sdk = (os.environ.get("MIN_SDK") or "").strip()
+          max_sdk = (os.environ.get("MAX_SDK") or "").strip()
+          icon_b64 = (os.environ.get("ICON_BASE64") or "").strip()
+
+          gradle_path = Path("app/build.gradle")
+          if gradle_path.exists():
+              text = gradle_path.read_text(encoding="utf-8")
+              if pkg_name:
+                  text = re.sub(r'(namespace\s*=?\s*[\'"])[^\'"\r\n]+([\'"])', rf'\g<1>{pkg_name}\g<2>', text)
+                  text = re.sub(r'(applicationId\s+[\'"])[^\'"\r\n]+([\'"])', rf'\g<1>{pkg_name}\g<2>', text)
+              if min_sdk.isdigit():
+                  text = re.sub(r'(\bminSdk\s+)\d+', rf'\g<1>{min_sdk}', text)
+              if max_sdk.isdigit():
+                  text = re.sub(r'(\btargetSdk\s+)\d+', rf'\g<1>{max_sdk}', text)
+                  text = re.sub(r'(\bcompileSdk\s+)\d+', rf'\g<1>{max_sdk}', text)
+              gradle_path.write_text(text, encoding="utf-8")
+
+          strings_path = Path("app/src/main/res/values/strings.xml")
+          if app_name and strings_path.exists():
+              s_text = strings_path.read_text(encoding="utf-8")
+              escaped_name = (
+                  app_name.replace("&", "&amp;")
+                  .replace("<", "&lt;")
+                  .replace(">", "&gt;")
+                  .replace("'", "&apos;")
+                  .replace('"', "&quot;")
+              )
+              s_text = re.sub(
+                  r'(<string\s+name=["\']app_name["\']\s*>)[^<]*(</string>)',
+                  rf'\g<1>{escaped_name}\g<2>',
+                  s_text
+              )
+              strings_path.write_text(s_text, encoding="utf-8")
+
+          cfg_path = Path("app/src/main/assets/appConfig.js")
+          if config_content.strip() or start_url:
+              cfg_path.parent.mkdir(parents=True, exist_ok=True)
+              if config_content.strip():
+                  c_text = config_content
+              elif cfg_path.exists():
+                  c_text = cfg_path.read_text(encoding="utf-8")
+              else:
+                  c_text = ""
+
+              if start_url and c_text:
+                  c_text = re.sub(r'(startURL\s*:\s*")[^"]*(")', rf'\g<1>{start_url}\g<2>', c_text)
+                  c_text = re.sub(r'(startUrl\s*:\s*")[^"]*(")', rf'\g<1>{start_url}\g<2>', c_text)
+
+              cfg_path.write_text(c_text, encoding="utf-8")
+
+          if icon_b64:
+              raw = icon_b64.split(",", 1)[1] if "," in icon_b64 else icon_b64
+              img_bytes = base64.b64decode(raw)
+              src_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+
+              res_dir = Path("app/src/main/res")
+              if res_dir.exists():
+                  for p in res_dir.rglob("*"):
+                      if not p.is_file():
+                          continue
+                      fname = p.name.lower()
+                      is_target = (
+                          ("ic_launcher" in fname and fname.endswith((".png", ".webp")))
+                          or fname in ("logo.png", "back.png")
+                      )
+                      if is_target:
+                          try:
+                              with Image.open(p) as existing:
+                                  w, h = existing.size
+                          except Exception:
+                              w, h = 192, 192
+                          resized = src_img.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
+                          if fname.endswith(".webp"):
+                              resized.save(p, format="WEBP", lossless=True)
+                          else:
+                              resized.save(p, format="PNG")
+          EOF
+
+      - name: Build APK with Gradle
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
